@@ -1,5 +1,5 @@
 {
   "title": "Rebar Labels Demo",
   "icon": "https://your-host.com/icon.png",  // Optional: use any 32x32 PNG URL
-  "url": "https://your-host.com/index.html"
+  "url": "https://github.com/dvidflix/tc-rebar-labels-extension/blob/main/index.html"
 }
