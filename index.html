@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rebar Labels Extension - Debug Version</title>
+  <title>Rebar Labels Extension</title>
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
@@ -24,18 +24,12 @@
   </style>
 </head>
 <body>
-  <h1>Rebar Labels Extension - Debug Version</h1>
+  <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Instructions:</strong></p>
-  <ol>
-    <li>Select <strong>one single yellow rebar bar</strong> in the 3D viewer (click directly on it).</li>
-    <li>Click <strong>Debug Selection</strong> – it will show raw data and try to fetch properties.</li>
-    <li>Check the Debug Output below and browser console (F12) for details.</li>
-    <li>If properties are shown, click <strong>Refresh Rebar Data</strong> to run the full labeling function.</li>
-  </ol>
+  <p><strong>Important:</strong> Select one or more yellow rebar bars in the 3D viewer (use box/lasso or click one to test).</p>
 
-  <button id="debug">Debug Selection (select one bar first!)</button>
+  <button id="debug">Debug Selection & Properties</button>
   <button id="refresh">Refresh Rebar Data</button>
   <button id="labelSelected" disabled>Label Selected Group</button>
   <button id="labelAll" disabled>Label All Groups</button>
@@ -44,9 +38,8 @@
   <h3>Debug Output:</h3>
   <pre id="debugOutput">No debug run yet.</pre>
 
-  <label><strong>Label Template</strong> (use exact property names with { } - case and spaces matter!):</label>
+  <label><strong>Label Template</strong> (use exact property names with { }):</label>
   <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm</textarea>
-  <p><small>Known properties: Serial number, Size, Length, Shape code, Rebar mark, Start Point X, Start Point Y, End Point X, End Point Y.</small></p>
 
   <table id="rebarTable">
     <thead>
@@ -70,7 +63,7 @@
     async function init() {
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
-        document.getElementById('status').textContent = 'Connected! Select a rebar bar and use Debug first.';
+        document.getElementById('status').textContent = 'Connected! Select rebar and use Debug first.';
         document.getElementById('status').classList.add('good');
       } catch (err) {
         document.getElementById('status').textContent = 'Connection failed: ' + err.message;
@@ -139,49 +132,48 @@
 
       try {
         const selection = await tcApi.viewer.getSelection();
-        logDebug(`Selection has ${selection.length} item(s)`);
-        logDebug(`Raw selection data:\n${JSON.stringify(selection, null, 2)}`);
+        logDebug(`Selection length: ${selection.length}`);
+        logDebug(`Raw selection: ${JSON.stringify(selection, null, 2)}`);
 
         if (selection.length === 0) {
-          logDebug('WARNING: Nothing is selected. Please select one yellow rebar bar.');
+          logDebug('No selection - select a rebar bar first.');
           return;
         }
 
-        let foundProps = false;
+        let found = false;
         for (const sel of selection) {
-          logDebug(`\n--- Processing selection item ---`);
+          const modelId = sel.modelId || sel.modelID;
           const runtimeIds = sel.objectRuntimeIds || [];
-          logDebug(`Found ${runtimeIds.length} runtime ID(s): ${JSON.stringify(runtimeIds)}`);
+          logDebug(`\nModelId: ${modelId}`);
+          logDebug(`RuntimeIds: ${JSON.stringify(runtimeIds)}`);
 
-          if (runtimeIds.length === 0) {
-            logDebug('No objectRuntimeIds found in this selection item.');
+          if (!modelId || runtimeIds.length === 0) {
+            logDebug('Missing modelId or runtimeIds.');
             continue;
           }
 
-          for (const rid of runtimeIds) {
-            logDebug(`\nTrying tcApi.model.getProperties(${rid}) ...`);
-            try {
-              const props = await tcApi.model.getProperties(rid);
-              logDebug(`SUCCESS! Fetched ${Object.keys(props).length} properties:`);
+          logDebug(`Trying tcApi.viewer.properties(${modelId}, runtimeIds)...`);
+          try {
+            const propsArray = await tcApi.viewer.properties(modelId, runtimeIds);
+            logDebug(`SUCCESS! Got ${propsArray.length} property object(s)`);
+            propsArray.forEach((props, i) => {
+              logDebug(`Properties for runtimeId ${runtimeIds[i]}:`);
               logDebug(JSON.stringify(props, null, 2));
-              foundProps = true;
-            } catch (e) {
-              logDebug(`FAILED for runtimeId ${rid}: ${e.message}`);
-            }
+            });
+            found = true;
+          } catch (e) {
+            logDebug(`FAILED: ${e.message}`);
           }
         }
 
-        if (!foundProps) {
-          logDebug('\nNo properties were fetched from any runtime ID.');
-        } else {
-          logDebug('\nProperties fetched successfully – Refresh Rebar Data should now work!');
+        if (!found) {
+          logDebug('No properties fetched.');
         }
       } catch (err) {
-        logDebug('Error during debug: ' + err.message);
-        console.error(err);
+        logDebug('Debug error: ' + err.message);
       }
 
-      logDebug('\n=== DEBUG END ===');
+      logDebug('=== DEBUG END ===');
     }
 
     async function processRebar() {
@@ -193,35 +185,27 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Processing selected objects...</td></tr>';
-      document.getElementById('status').textContent = 'Processing...';
-      document.getElementById('status').classList.remove('good', 'error');
+      tbody.innerHTML = '<tr><td colspan="5">Processing...</td></tr>';
 
       try {
         const selection = await tcApi.viewer.getSelection();
-
-        if (selection.length === 0) {
-          throw new Error('No objects selected. Select one or more yellow rebar bars first.');
-        }
+        if (selection.length === 0) throw new Error('No selection.');
 
         let allRebar = [];
         for (const sel of selection) {
+          const modelId = sel.modelId;
           const runtimeIds = sel.objectRuntimeIds || [];
-          for (const rid of runtimeIds) {
-            try {
-              const props = await tcApi.model.getProperties(rid);
-              if (props['Length'] || props['Size'] || props['Serial number'] || props['Shape code']) {
-                allRebar.push({ id: rid, props });
-              }
-            } catch (e) {
-              console.warn('Skipped runtimeId:', rid, e);
+          if (!modelId || runtimeIds.length === 0) continue;
+
+          const propsArray = await tcApi.viewer.properties(modelId, runtimeIds);
+          propsArray.forEach((props, i) => {
+            if (props['Length'] || props['Size'] || props['Serial number']) {
+              allRebar.push({ id: runtimeIds[i], props, modelId });
             }
-          }
+          });
         }
 
-        if (allRebar.length === 0) {
-          throw new Error('No rebar detected in selection. Run Debug Selection to see what is returned.');
-        }
+        if (allRebar.length === 0) throw new Error('No rebar in selection - check Debug.');
 
         const groupMap = {};
         for (const item of allRebar) {
@@ -229,7 +213,7 @@
           const mark = p['Serial number'] || p['Rebar mark'] || 'Unknown';
           const dia = p['Size'] || '';
           const len = Math.round(parseFloat(p['Length']) || 0);
-          const key = `${mark}|${dia}|${len}`;
+          const key = `${mark}|${dia}|${len}|${item.modelId}`;
 
           if (!groupMap[key]) {
             groupMap[key] = {
@@ -237,13 +221,15 @@
               diameter: dia,
               length: len,
               objectIds: [],
-              sampleProps: p
+              sampleProps: p,
+              modelId: item.modelId
             };
           }
           groupMap[key].objectIds.push(item.id);
         }
 
         groups = Object.values(groupMap);
+
         groups.forEach(g => {
           g.quantity = g.objectIds.length;
           g.totalLength = (g.length * g.quantity).toFixed(0);
@@ -265,21 +251,20 @@
             selectedGroup = group;
             document.getElementById('labelSelected').disabled = false;
 
-            await tcApi.viewer.isolate({ objectIds: group.objectIds });
-            await tcApi.viewer.zoomTo({ objectIds: group.objectIds });
+            await tcApi.viewer.isolate({ modelId: group.modelId, objectIds: group.objectIds });
+            await tcApi.viewer.zoomTo({ modelId: group.modelId, objectIds: group.objectIds });
           };
           tbody.appendChild(tr);
         });
 
         document.getElementById('labelAll').disabled = false;
         document.getElementById('clear').disabled = false;
-        document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${allRebar.length} bars.`;
+        document.getElementById('status').textContent = `Success! ${groups.length} groups from ${allRebar.length} bars.`;
         document.getElementById('status').classList.add('good');
       } catch (err) {
         tbody.innerHTML = `<tr><td colspan="5">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
         document.getElementById('status').classList.add('error');
-        console.error(err);
       }
     }
 
