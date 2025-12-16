@@ -28,7 +28,7 @@
 
   <label><strong>Label Template</strong> (use {PropertyName} placeholders - exact case!):</label>
   <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm</textarea>
-  <p><small>Detected properties: Serial number, Size, Length, Shape code, Rebar mark, Start Point X/Y, End Point X/Y, etc.<br>Examples: {Rebar mark}, {Shape code}, {Start Point X}</small></p>
+  <p><small>Known properties: Serial number, Size, Length, Shape code, Rebar mark, Start Point X/Y, End Point X/Y.<br>Use exactly as shown, e.g. {Serial number}, {Size}.</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
   <button id="labelSelected" disabled>Label Selected Group</button>
@@ -57,7 +57,7 @@
     async function init() {
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
-        document.getElementById('status').textContent = 'Connected! Load your rebar model in the 3D viewer, then click Refresh.';
+        document.getElementById('status').textContent = 'Connected! Load your rebar model in the 3D viewer, select one rebar bar to verify properties if needed, then click Refresh.';
         document.getElementById('status').classList.add('good');
         document.getElementById('status').classList.remove('error');
       } catch (err) {
@@ -123,7 +123,7 @@
         y: (bounds.min.y + bounds.max.y) / 2,
         z: (bounds.min.z + bounds.max.z) / 2
       };
-      const labelPos = { x: anchor.x, y: anchor.y + 1.0, z: anchor.z + 2.5 };
+      const labelPos = { x: anchor.x, y: anchor.y + 1.0, z: anchor.z + 3.0 };
 
       await addCallout(anchor, labelPos, text);
     }
@@ -137,34 +137,36 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Fetching objects from loaded models...</td></tr>';
-      document.getElementById('status').textContent = 'Processing...';
+      tbody.innerHTML = '<tr><td colspan="5">Fetching current selection...</td></tr>';
+      document.getElementById('status').textContent = 'Processing selected objects...';
       document.getElementById('status').classList.remove('good', 'error');
 
       try {
-        // Reliable method: Directly get all objects from all currently loaded models
-        const allObjects = await tcApi.viewer.getObjects();
+        // Use the current selection in the viewer as the source of rebar objects
+        const selection = await tcApi.viewer.getSelection();
 
-        if (allObjects.length === 0) {
-          throw new Error('No objects found in the viewer. Make sure your rebar model is fully loaded in the 3D viewer tab.');
+        if (selection.length === 0) {
+          throw new Error('No objects selected in the viewer. Please select all rebar objects (or a selection containing rebar) before clicking Refresh.');
         }
 
         let allRebar = [];
-        for (const obj of allObjects) {
+        for (const sel of selection) {
           try {
-            const props = await tcApi.model.getProperties(obj.id);
-            if (props['Serial number'] || props['Rebar mark'] || (props['Size'] && props['Length'])) {
-              allRebar.push({ id: obj.id, props });
+            const props = await tcApi.model.getProperties(sel.objectId);
+            // Detect rebar based on your known properties
+            if (props['Serial number'] || props['Size'] || props['Length'] || props['Shape code']) {
+              allRebar.push({ id: sel.objectId, props });
             }
           } catch (e) {
-            // Skip objects with inaccessible properties
+            // Skip if properties can't be fetched
           }
         }
 
         if (allRebar.length === 0) {
-          throw new Error('No rebar elements detected. Verify exact property names by selecting a single bar in the viewer.');
+          throw new Error('No rebar detected in the selected objects. Select one or more yellow rebar bars and try again. Make sure the properties include "Serial number", "Size", "Length", etc.');
         }
 
+        // Grouping logic
         const groupMap = {};
         for (const item of allRebar) {
           const p = item.props;
@@ -191,6 +193,7 @@
           g.totalLength = (g.length * g.quantity).toFixed(0);
         });
 
+        // Render table
         tbody.innerHTML = '';
         groups.forEach(group => {
           const tr = document.createElement('tr');
@@ -215,7 +218,7 @@
 
         document.getElementById('labelAll').disabled = false;
         document.getElementById('clear').disabled = false;
-        document.getElementById('status').textContent = `Success! Found ${groups.length} groups (${allRebar.length} bars).`;
+        document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${allRebar.length} selected bars.`;
         document.getElementById('status').classList.add('good');
       } catch (err) {
         tbody.innerHTML = `<tr><td colspan="5">Error: ${err.message}</td></tr>`;
