@@ -2,52 +2,210 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Rebar Labels Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rebar Labels</title>
   <script src="https://unpkg.com/trimble-connect-workspace-api@latest"></script>
   <style>
-    body { font-family: Arial; padding: 20px; }
-    button { padding: 10px; margin: 10px 0; }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+    h1 { color: #1a5fb4; }
+    button { padding: 10px 16px; margin: 5px; background: #1a5fb4; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #144a8a; }
+    input, textarea { padding: 8px; margin: 10px 0; width: 100%; box-sizing: border-box; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background: #1a5fb4; color: white; }
+    tr:hover { background: #f0f5ff; cursor: pointer; }
+    .selected { background: #d0e4ff !important; }
+    .status { margin: 10px 0; font-weight: bold; }
   </style>
 </head>
 <body>
   <h1>Rebar Labels Extension</h1>
-  <p>Status: <span id="status">Connecting...</span></p>
-  <button id="testButton" disabled>Test Viewer Connection</button>
+  <div class="status" id="status">Connecting to Trimble Connect...</div>
 
-  <script src="https://unpkg.com/trimble-connect-workspace-api@latest"></script>
+  <label><strong>Label Template</strong> (use {PropertyName} placeholders):</label>
+  <textarea id="template" rows="3">[ {Mark} ] H {H} ; V {V}</textarea>
+  <p><small>Available properties: Mark, Diameter, Length, H, V, ShapeCode, Grade, etc. (case-sensitive)</small></p>
+
+  <button id="refresh">Refresh Rebar Data</button>
+  <button id="labelSelected">Label Selected Group</button>
+  <button id="labelAll">Label All Groups</button>
+  <button id="clear">Clear Labels</button>
+
+  <table id="rebarTable">
+    <thead>
+      <tr>
+        <th>Mark</th>
+        <th>Diameter</th>
+        <th>Length</th>
+        <th>Shape</th>
+        <th>Qty</th>
+        <th>Total Length</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
   <script>
     let tcApi;
-    const statusEl = document.getElementById('status');
+    let groups = [];
+    let markupIds = [];
+    let selectedGroup = null;
 
     async function init() {
       try {
         tcApi = await connect(window.parent);
-        statusEl.textContent = 'Connected! Ready to go.';
-        
-        // Optional: Add a nice menu button
-        await tcApi.ui.setMenu({
-          title: 'Rebar Labels',
-          command: 'refresh'
-        });
-
-        // Enable any buttons
-        document.getElementById('testButton')?.removeAttribute('disabled');
+        document.getElementById('status').textContent = 'Connected! Load a rebar model and click Refresh.';
+        await tcApi.ui.setMenu({ title: 'Rebar Labels', command: 'refresh' });
       } catch (err) {
-        statusEl.textContent = 'Connection failed: ' + err.message;
-        console.error(err);
+        document.getElementById('status').textContent = 'Connection failed: ' + err.message;
       }
     }
 
-    // Add your test button handler here
-    document.getElementById('testButton')?.addEventListener('click', async () => {
-      if (!tcApi) return alert('Not connected yet');
-      try {
-        const models = await tcApi.model.getModels();
-        alert(`Found ${models.length} loaded model(s)!`);
-      } catch (err) {
-        alert('Error: ' + err.message);
+    async function clearMarkups() {
+      for (const id of markupIds) {
+        await tcApi.viewer.markup.removeMarkup(id).catch(() => {});
       }
-    });
+      markupIds = [];
+    }
+
+    async function addCallout(anchor, labelPos, text) {
+      // Arrow (leader line)
+      const arrowId = await tcApi.viewer.markup.addArrowMarkup({
+        start: labelPos,
+        end: anchor,
+        color: { r: 255, g: 255, b: 255 },
+        width: 4
+      });
+      markupIds.push(arrowId);
+
+      // Text label
+      const textId = await tcApi.viewer.markup.addTextMarkup({
+        text: text,
+        position: labelPos,
+        color: { r: 0, g: 0, b: 0 },
+        backgroundColor: { r: 255, g: 255, b: 255, a: 0.9 },
+        fontSize: 36
+      });
+      markupIds.push(textId);
+    }
+
+    async function labelGroup(group, isOnly = false) {
+      if (isOnly) await clearMarkups();
+
+      const props = await tcApi.model.getProperties(group.objectIds[0]);
+      let text = document.getElementById('template').value;
+
+      // Replace common placeholders (add more if needed)
+      const replacements = {
+        Mark: props['Position Number'] || props['Mark'] || 'N/A',
+        Diameter: props['Nominal Diameter'] || props['Diameter'] || '',
+        Length: (props['Length'] || 0).toFixed(0),
+        H: props['H'] || props['Horizontal'] || '',
+        V: props['V'] || props['Vertical'] || '',
+        ShapeCode: props['Shape Code'] || props['ShapeCode'] || '',
+        Grade: props['Grade'] || ''
+      };
+
+      for (const [key, value] of Object.entries(replacements)) {
+        text = text.replace(new RegExp(`{${key}}`, 'g'), value || '');
+      }
+
+      const bounds = await tcApi.viewer.getObjectBounds(group.objectIds);
+      const anchor = {
+        x: (bounds.min.x + bounds.max.x) / 2,
+        y: (bounds.min.y + bounds.max.y) / 2,
+        z: (bounds.min.z + bounds.max.z) / 2
+      };
+      const labelPos = { x: anchor.x, y: anchor.y, z: anchor.z + 1.8 };
+
+      await addCallout(anchor, labelPos, text);
+    }
+
+    async function processRebar() {
+      await clearMarkups();
+      groups = [];
+      selectedGroup = null;
+      document.querySelector('#rebarTable tbody').innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+
+      const models = await tcApi.model.getModels();
+      if (models.length === 0) {
+        document.querySelector('#rebarTable tbody').innerHTML = '<tr><td colspan="6">No models loaded</td></tr>';
+        return;
+      }
+
+      let rebarObjects = [];
+      for (const model of models) {
+        const objects = await tcApi.model.getObjects(model.id, { type: 'IfcReinforcingBar' });
+        for (const obj of objects) {
+          const props = await tcApi.model.getProperties(obj.id);
+          rebarObjects.push({
+            id: obj.id,
+            modelId: model.id,
+            props
+          });
+        }
+      }
+
+      // Group by Mark + Diameter + Length + Shape
+      const groupMap = {};
+      for (const item of rebarObjects) {
+        const p = item.props;
+        const key = `${p['Position Number'] || p['Mark'] || 'Unknown'}|${p['Nominal Diameter'] || p['Diameter'] || ''}|${p['Length'] || ''}|${p['Shape Code'] || ''}`;
+        if (!groupMap[key]) {
+          groupMap[key] = {
+            mark: p['Position Number'] || p['Mark'] || 'Unknown',
+            diameter: p['Nominal Diameter'] || p['Diameter'] || '',
+            length: p['Length'] || 0,
+            shape: p['Shape Code'] || '',
+            objectIds: [],
+            sampleProps: p
+          };
+        }
+        groupMap[key].objectIds.push(item.id);
+      }
+
+      groups = Object.values(groupMap);
+      groups.forEach(g => {
+        g.quantity = g.objectIds.length;
+        g.totalLength = (g.length * g.quantity).toFixed(0);
+      });
+
+      // Render table
+      const tbody = document.querySelector('#rebarTable tbody');
+      tbody.innerHTML = '';
+      groups.forEach((group, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${group.mark}</td>
+          <td>${group.diameter}</td>
+          <td>${group.length}</td>
+          <td>${group.shape}</td>
+          <td>${group.quantity}</td>
+          <td>${group.totalLength}</td>
+        `;
+        tr.onclick = async () => {
+          document.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+          tr.classList.add('selected');
+          selectedGroup = group;
+
+          await tcApi.viewer.isolate({ objectIds: group.objectIds });
+          await tcApi.viewer.zoomTo({ objectIds: group.objectIds });
+        };
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('status').textContent = `Found ${groups.length} rebar groups. Click a row to select.`;
+    }
+
+    // Button handlers
+    document.getElementById('refresh').onclick = processRebar;
+    document.getElementById('clear').onclick = clearMarkups;
+    document.getElementById('labelSelected').onclick = () => selectedGroup && labelGroup(selectedGroup, true);
+    document.getElementById('labelAll').onclick = async () => {
+      await clearMarkups();
+      for (const g of groups) await labelGroup(g);
+    };
 
     init();
   </script>
