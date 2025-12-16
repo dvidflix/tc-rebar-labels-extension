@@ -26,9 +26,9 @@
   <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <label><strong>Label Template</strong> (use {PropertyName} placeholders):</label>
-  <textarea id="template" rows="3">[ {Serial number} ] L: {Length} mm</textarea>
-  <p><small>Known properties in your model: Serial number, Shape code, Size, Length, Rebar mark, etc.<br>Add more like {Rebar mark}, {Size}, {Shape code} as needed.</small></p>
+  <label><strong>Label Template</strong> (use {PropertyName} placeholders - exact case!):</label>
+  <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm</textarea>
+  <p><small>Detected properties in your model: Serial number, Size, Length, Shape code, Rebar mark, Start Point X/Y, End Point X/Y, etc.<br>Try adding {Rebar mark}, {Shape code}, {Start Point X}, etc.</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
   <button id="labelSelected" disabled>Label Selected Group</button>
@@ -99,20 +99,24 @@
       const props = group.sampleProps;
       let text = document.getElementById('template').value;
 
-      // Expanded property mapping based on your model's visible properties
+      // Comprehensive property mapping - add more if needed
       const map = {
         'Serial number': props['Serial number'] || 'N/A',
-        'Shape code': props['Shape code'] || '',
-        'Size': props['Size'] || props['Nominal Diameter'] || props['Diameter'] || '',
+        'Rebar mark': props['Rebar mark'] || props['Mark'] || '',
+        'Size': props['Size'] || '',
         'Length': (props['Length'] || 0).toFixed(0),
-        'Rebar mark': props['Rebar mark'] || props['Mark'] || props['Position Number'] || '',
+        'Shape code': props['Shape code'] || '',
+        'Start Point X': props['Start Point X'] || '',
+        'Start Point Y': props['Start Point Y'] || '',
+        'End Point X': props['End Point X'] || '',
+        'End Point Y': props['End Point Y'] || '',
       };
 
       for (const [key, value] of Object.entries(map)) {
         text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
       }
 
-      // Fallback: replace any remaining {Property} with empty if not found
+      // Clean up any unfound placeholders
       text = text.replace(/\{[^}]+\}/g, '');
 
       const bounds = await tcApi.viewer.getObjectBounds(group.objectIds);
@@ -121,7 +125,7 @@
         y: (bounds.min.y + bounds.max.y) / 2,
         z: (bounds.min.z + bounds.max.z) / 2
       };
-      const labelPos = { x: anchor.x, y: anchor.y + 1.0, z: anchor.z + 2.0 }; // Adjusted offset for better visibility
+      const labelPos = { x: anchor.x, y: anchor.y + 1.0, z: anchor.z + 2.5 };
 
       await addCallout(anchor, labelPos, text);
     }
@@ -135,44 +139,46 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Fetching all objects from loaded models...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5">Fetching loaded models...</td></tr>';
       document.getElementById('status').textContent = 'Processing...';
       document.getElementById('status').classList.remove('good', 'error');
 
       try {
-        // Correct API usage: getObjects() with no arguments returns all loaded objects
-        const allObjects = await tcApi.viewer.getObjects();
+        // Correct way: First get all loaded models, then get objects per model
+        const loadedModels = await tcApi.viewer.getLoadedModels ? await tcApi.viewer.getLoadedModels() : [];
 
-        if (allObjects.length === 0) {
-          throw new Error('No objects found in the viewer. Ensure your rebar model is fully loaded.');
+        if (loadedModels.length === 0) {
+          throw new Error('No models are currently loaded in the 3D viewer. Please load your rebar model first.');
         }
 
         let allRebar = [];
-        for (const obj of allObjects) {
-          try {
-            const props = await tcApi.model.getProperties(obj.id);
-            // Relaxed detection: look for common rebar indicators in your model
-            const hasSerial = props['Serial number'];
-            const hasSize = props['Size'];
-            const hasLength = props['Length'];
-            if (hasSerial || (hasSize && hasLength)) {
-              allRebar.push({ id: obj.id, props });
+        for (const model of loadedModels) {
+          const modelId = model.id || model.modelId;
+          const objects = await tcApi.viewer.getObjects(modelId);
+
+          for (const obj of objects) {
+            try {
+              const props = await tcApi.model.getProperties(obj.id);
+              // Detection based on your exact property names
+              if (props['Serial number'] || props['Rebar mark'] || (props['Size'] && props['Length'])) {
+                allRebar.push({ id: obj.id, props, modelId });
+              }
+            } catch (e) {
+              // Skip objects with inaccessible properties
             }
-          } catch (e) {
-            // Skip objects without accessible properties
           }
         }
 
         if (allRebar.length === 0) {
-          throw new Error('No rebar elements detected. Your model uses different property names (e.g., "Serial number", "Size", "Length"). Try selecting a single bar manually in the viewer and check its properties.');
+          throw new Error('No rebar detected. The model may use slightly different property names or the rebar is not recognized as IfcReinforcingBar. Try selecting one bar and checking its exact property names.');
         }
 
-        // Grouping: Use Serial number as primary mark, Size as diameter, Length
+        // Grouping by Serial number (primary), Size, and Length
         const groupMap = {};
         for (const item of allRebar) {
           const p = item.props;
           const mark = p['Serial number'] || p['Rebar mark'] || 'Unknown';
-          const dia = p['Size'] || p['Nominal Diameter'] || p['Diameter'] || '';
+          const dia = p['Size'] || '';
           const len = Math.round(parseFloat(p['Length']) || 0);
           const key = `${mark}|${dia}|${len}`;
 
