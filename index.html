@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rebar Labels</title>
+  <title>Rebar Labels Extension</title>
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
@@ -19,6 +19,7 @@
     .selected { background: #d0e4ff !important; }
     .status { margin: 10px 0; font-weight: bold; }
     .good { color: #008000; }
+    .error { color: #d00000; }
   </style>
 </head>
 <body>
@@ -58,8 +59,10 @@
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
         document.getElementById('status').textContent = 'Connected! Open the 3D viewer tab, load your rebar model, then click Refresh.';
         document.getElementById('status').classList.add('good');
+        document.getElementById('status').classList.remove('error');
       } catch (err) {
         document.getElementById('status').textContent = 'Connection failed: ' + err.message;
+        document.getElementById('status').classList.add('error');
         console.error(err);
       }
     }
@@ -100,7 +103,8 @@
         'Serial Number': props['Serial Number'] || props['Position Number'] || props['Mark'] || 'N/A',
         'Position Number': props['Position Number'] || props['Mark'] || '',
         'Mark': props['Mark'] || '',
-        'Diameter': props['Nominal Diameter'] || props['Diameter'] || '',
+        'Nominal Diameter': props['Nominal Diameter'] || props['Diameter'] || '',
+        'Diameter': props['Diameter'] || props['Nominal Diameter'] || '',
         'Length': (props['Length'] || 0).toFixed(0),
         'Start Point X': props['Start Point X'] || props['Start_X'] || props['H'] || '',
         'Start Point Y': props['Start Point Y'] || props['Start_Y'] || props['V'] || '',
@@ -109,7 +113,7 @@
       };
 
       for (const [key, value] of Object.entries(map)) {
-        text = text.replace(new RegExp(`{${key}}`, 'g'), value || '');
+        text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
       }
 
       const bounds = await tcApi.viewer.getObjectBounds(group.objectIds);
@@ -132,41 +136,46 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Fetching loaded models...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5">Fetching objects from loaded models...</td></tr>';
       document.getElementById('status').textContent = 'Processing...';
+      document.getElementById('status').classList.remove('good', 'error');
 
       try {
-        // FIXED: Use viewer.getLoadedModels()
-        const models = await tcApi.viewer.getLoadedModels();
-        if (models.length === 0) throw new Error('No models loaded in the 3D viewer');
+        // Updated method: getObjects() without parameters returns all objects from loaded models
+        const allObjects = await tcApi.viewer.getObjects();
+
+        if (allObjects.length === 0) {
+          throw new Error('No objects found. Make sure a model containing rebar is loaded in the 3D viewer.');
+        }
 
         let allRebar = [];
-        for (const model of models) {
-          // FIXED: Use viewer.getObjects(model.id)
-          const objects = await tcApi.viewer.getObjects(model.id);
-          for (const obj of objects) {
-            try {
-              const props = await tcApi.model.getProperties(obj.id);
-              const hasMark = props['Serial Number'] || props['Position Number'] || props['Mark'];
-              const hasDia = props['Nominal Diameter'] || props['Diameter'];
-              const hasLen = props['Length'];
-              if (hasMark || (hasDia && hasLen)) {
-                allRebar.push({ id: obj.id, props });
-              }
-            } catch (e) {} // Skip inaccessible objects
+        for (const obj of allObjects) {
+          try {
+            const props = await tcApi.model.getProperties(obj.id);
+            const hasMark = props['Serial Number'] || props['Position Number'] || props['Mark'];
+            const hasDia = props['Nominal Diameter'] || props['Diameter'];
+            const hasLen = props['Length'];
+            if (hasMark || (hasDia && hasLen)) {
+              allRebar.push({ id: obj.id, props });
+            }
+          } catch (e) {
+            // Skip objects where properties cannot be accessed
           }
         }
 
-        if (allRebar.length === 0) throw new Error('No rebar found – check property names or model');
+        if (allRebar.length === 0) {
+          throw new Error('No rebar elements found. Check that the model contains rebar with properties like Serial Number, Diameter, Length, etc.');
+        }
 
-        // Grouping logic (same as before)
+        // Group rebar by Mark/Serial + Diameter + Length
         const groupMap = {};
         for (const item of allRebar) {
           const p = item.props;
           const mark = p['Serial Number'] || p['Position Number'] || p['Mark'] || 'Unknown';
           const dia = p['Nominal Diameter'] || p['Diameter'] || '';
-          const len = p['Length'] || 0;
+          const len = Math.round(p['Length'] || 0); // Round to avoid floating-point differences
           const key = `${mark}|${dia}|${len}`;
+
           if (!groupMap[key]) {
             groupMap[key] = {
               mark,
@@ -197,7 +206,7 @@
             <td>${group.totalLength}</td>
           `;
           tr.onclick = async () => {
-            document.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+            document.querySelectorAll('#rebarTable tr').forEach(r => r.classList.remove('selected'));
             tr.classList.add('selected');
             selectedGroup = group;
             document.getElementById('labelSelected').disabled = false;
@@ -215,17 +224,25 @@
       } catch (err) {
         tbody.innerHTML = `<tr><td colspan="5">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
+        document.getElementById('status').classList.add('error');
+        console.error(err);
       }
     }
 
+    // Button event listeners
     document.getElementById('refresh').onclick = processRebar;
     document.getElementById('clear').onclick = clearMarkups;
-    document.getElementById('labelSelected').onclick = () => selectedGroup && labelGroup(selectedGroup, true);
+    document.getElementById('labelSelected').onclick = () => {
+      if (selectedGroup) labelGroup(selectedGroup, true);
+    };
     document.getElementById('labelAll').onclick = async () => {
       await clearMarkups();
-      for (const g of groups) await labelGroup(g);
+      for (const g of groups) {
+        await labelGroup(g);
+      }
     };
 
+    // Initialize on load
     init();
   </script>
 </body>
