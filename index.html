@@ -26,11 +26,11 @@
   <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Important:</strong> Select one or more yellow rebar bars in the 3D viewer before clicking Refresh. For best results, use box/lasso selection to select many or all rebar bars.</p>
+  <p><strong>Important:</strong> Select one or more yellow rebar bars in the 3D viewer (use box or lasso selection). Start with just one bar to test.</p>
 
-  <label><strong>Label Template</strong> (use exact property names with { } - case and spaces matter!):</label>
+  <label><strong>Label Template</strong> (use exact property names with { }):</label>
   <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm</textarea>
-  <p><small>Known properties from your model: Serial number, Size, Length, Shape code, Rebar mark, Start Point X, Start Point Y, End Point X, End Point Y.</small></p>
+  <p><small>Known properties: Serial number, Size, Length, Shape code, Rebar mark, Start Point X, Start Point Y, End Point X, End Point Y.</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
   <button id="labelSelected" disabled>Label Selected Group</button>
@@ -59,7 +59,7 @@
     async function init() {
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
-        document.getElementById('status').textContent = 'Connected! Select yellow rebar bars in the viewer, then click Refresh.';
+        document.getElementById('status').textContent = 'Connected! Select yellow rebar bars and click Refresh.';
         document.getElementById('status').classList.add('good');
       } catch (err) {
         document.getElementById('status').textContent = 'Connection failed: ' + err.message;
@@ -100,12 +100,11 @@
       const props = group.sampleProps;
       let text = document.getElementById('template').value;
 
-      // Dynamically replace any {Property Name} with its value
       for (const [key, value] of Object.entries(props)) {
         text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
       }
 
-      text = text.replace(/\{[^}]+\}/g, '').trim(); // Remove unused placeholders
+      text = text.replace(/\{[^}]+\}/g, '').trim();
 
       const bounds = await tcApi.viewer.getObjectBounds(group.objectIds);
       const anchor = {
@@ -127,7 +126,7 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Processing selected objects...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5">Processing selection...</td></tr>';
       document.getElementById('status').textContent = 'Processing...';
       document.getElementById('status').classList.remove('good', 'error');
 
@@ -135,32 +134,34 @@
         const selection = await tcApi.viewer.getSelection();
 
         if (selection.length === 0) {
-          throw new Error('Nothing selected. Please select one or more yellow rebar bars in the 3D viewer.');
+          throw new Error('No objects selected. Select one or more yellow rebar bars first (try just one to test).');
         }
 
         let allRebar = [];
         for (const sel of selection) {
-          // Handle runtime IDs format from your test: objectRuntimeIds array
-          const runtimeIds = sel.objectRuntimeIds || [sel.objectId || sel.id];
-          const modelId = sel.modelId || sel.modelID;
+          const runtimeIds = sel.objectRuntimeIds || [];
+          if (runtimeIds.length === 0) {
+            console.warn('No objectRuntimeIds in selection item:', sel);
+            continue;
+          }
 
           for (const runtimeId of runtimeIds) {
             try {
-              const props = await tcApi.model.getProperties(runtimeId); // Use runtime ID directly
-              if (props['Serial number'] || props['Size'] || props['Length'] || props['Shape code']) {
+              const props = await tcApi.model.getProperties(runtimeId);
+              // Looser detection - if it has Length or Size, likely rebar
+              if (props['Length'] || props['Size'] || props['Serial number'] || props['Shape code']) {
                 allRebar.push({ id: runtimeId, props });
               }
             } catch (e) {
-              console.warn('Skipped runtime ID (no props):', runtimeId);
+              console.warn('Failed to get properties for runtimeId:', runtimeId, e);
             }
           }
         }
 
         if (allRebar.length === 0) {
-          throw new Error('No rebar found in selection. Make sure you selected yellow rebar bars (they have "Serial number", "Size", "Length"). Try selecting just one bar first.');
+          throw new Error('No rebar detected. The selected bars may not have expected properties, or selection format issue. Try selecting one bar and run the test extension to see properties.');
         }
 
-        // Grouping
         const groupMap = {};
         for (const item of allRebar) {
           const p = item.props;
@@ -187,7 +188,6 @@
           g.totalLength = (g.length * g.quantity).toFixed(0);
         });
 
-        // Render table
         tbody.innerHTML = '';
         groups.forEach(group => {
           const tr = document.createElement('tr');
@@ -204,7 +204,6 @@
             selectedGroup = group;
             document.getElementById('labelSelected').disabled = false;
 
-            // Isolate and zoom using runtime IDs
             await tcApi.viewer.isolate({ objectIds: group.objectIds });
             await tcApi.viewer.zoomTo({ objectIds: group.objectIds });
           };
