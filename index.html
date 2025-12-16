@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rebar Labels Extension</title>
+  <title>Rebar Labels Extension - Debug Version</title>
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
@@ -12,6 +12,7 @@
     button:hover { background: #144a8a; }
     button:disabled { background: #aaa; cursor: not-allowed; }
     textarea { padding: 8px; margin: 10px 0; width: 100%; box-sizing: border-box; }
+    pre { background: #eee; padding: 10px; border-radius: 4px; max-height: 400px; overflow: auto; white-space: pre-wrap; font-size: 13px; }
     table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
     th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
     th { background: #1a5fb4; color: white; }
@@ -23,19 +24,29 @@
   </style>
 </head>
 <body>
-  <h1>Rebar Labels Extension</h1>
+  <h1>Rebar Labels Extension - Debug Version</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Important:</strong> Select one or more yellow rebar bars in the 3D viewer (use box or lasso selection). Start with just one bar to test.</p>
+  <p><strong>Instructions:</strong></p>
+  <ol>
+    <li>Select <strong>one single yellow rebar bar</strong> in the 3D viewer (click directly on it).</li>
+    <li>Click <strong>Debug Selection</strong> – it will show raw data and try to fetch properties.</li>
+    <li>Check the Debug Output below and browser console (F12) for details.</li>
+    <li>If properties are shown, click <strong>Refresh Rebar Data</strong> to run the full labeling function.</li>
+  </ol>
 
-  <label><strong>Label Template</strong> (use exact property names with { }):</label>
-  <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm</textarea>
-  <p><small>Known properties: Serial number, Size, Length, Shape code, Rebar mark, Start Point X, Start Point Y, End Point X, End Point Y.</small></p>
-
+  <button id="debug">Debug Selection (select one bar first!)</button>
   <button id="refresh">Refresh Rebar Data</button>
   <button id="labelSelected" disabled>Label Selected Group</button>
   <button id="labelAll" disabled>Label All Groups</button>
   <button id="clear" disabled>Clear Labels</button>
+
+  <h3>Debug Output:</h3>
+  <pre id="debugOutput">No debug run yet.</pre>
+
+  <label><strong>Label Template</strong> (use exact property names with { } - case and spaces matter!):</label>
+  <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm</textarea>
+  <p><small>Known properties: Serial number, Size, Length, Shape code, Rebar mark, Start Point X, Start Point Y, End Point X, End Point Y.</small></p>
 
   <table id="rebarTable">
     <thead>
@@ -59,13 +70,19 @@
     async function init() {
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
-        document.getElementById('status').textContent = 'Connected! Select yellow rebar bars and click Refresh.';
+        document.getElementById('status').textContent = 'Connected! Select a rebar bar and use Debug first.';
         document.getElementById('status').classList.add('good');
       } catch (err) {
         document.getElementById('status').textContent = 'Connection failed: ' + err.message;
         document.getElementById('status').classList.add('error');
         console.error(err);
       }
+    }
+
+    function logDebug(msg) {
+      const output = document.getElementById('debugOutput');
+      output.textContent += msg + '\n';
+      console.log('DEBUG:', msg);
     }
 
     async function clearMarkups() {
@@ -103,7 +120,6 @@
       for (const [key, value] of Object.entries(props)) {
         text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
       }
-
       text = text.replace(/\{[^}]+\}/g, '').trim();
 
       const bounds = await tcApi.viewer.getObjectBounds(group.objectIds);
@@ -117,6 +133,57 @@
       await addCallout(anchor, labelPos, text);
     }
 
+    async function debugSelection() {
+      document.getElementById('debugOutput').textContent = '=== DEBUG START ===\n';
+      logDebug('Starting debug...');
+
+      try {
+        const selection = await tcApi.viewer.getSelection();
+        logDebug(`Selection has ${selection.length} item(s)`);
+        logDebug(`Raw selection data:\n${JSON.stringify(selection, null, 2)}`);
+
+        if (selection.length === 0) {
+          logDebug('WARNING: Nothing is selected. Please select one yellow rebar bar.');
+          return;
+        }
+
+        let foundProps = false;
+        for (const sel of selection) {
+          logDebug(`\n--- Processing selection item ---`);
+          const runtimeIds = sel.objectRuntimeIds || [];
+          logDebug(`Found ${runtimeIds.length} runtime ID(s): ${JSON.stringify(runtimeIds)}`);
+
+          if (runtimeIds.length === 0) {
+            logDebug('No objectRuntimeIds found in this selection item.');
+            continue;
+          }
+
+          for (const rid of runtimeIds) {
+            logDebug(`\nTrying tcApi.model.getProperties(${rid}) ...`);
+            try {
+              const props = await tcApi.model.getProperties(rid);
+              logDebug(`SUCCESS! Fetched ${Object.keys(props).length} properties:`);
+              logDebug(JSON.stringify(props, null, 2));
+              foundProps = true;
+            } catch (e) {
+              logDebug(`FAILED for runtimeId ${rid}: ${e.message}`);
+            }
+          }
+        }
+
+        if (!foundProps) {
+          logDebug('\nNo properties were fetched from any runtime ID.');
+        } else {
+          logDebug('\nProperties fetched successfully – Refresh Rebar Data should now work!');
+        }
+      } catch (err) {
+        logDebug('Error during debug: ' + err.message);
+        console.error(err);
+      }
+
+      logDebug('\n=== DEBUG END ===');
+    }
+
     async function processRebar() {
       await clearMarkups();
       groups = [];
@@ -126,7 +193,7 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Processing selection...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5">Processing selected objects...</td></tr>';
       document.getElementById('status').textContent = 'Processing...';
       document.getElementById('status').classList.remove('good', 'error');
 
@@ -134,32 +201,26 @@
         const selection = await tcApi.viewer.getSelection();
 
         if (selection.length === 0) {
-          throw new Error('No objects selected. Select one or more yellow rebar bars first (try just one to test).');
+          throw new Error('No objects selected. Select one or more yellow rebar bars first.');
         }
 
         let allRebar = [];
         for (const sel of selection) {
           const runtimeIds = sel.objectRuntimeIds || [];
-          if (runtimeIds.length === 0) {
-            console.warn('No objectRuntimeIds in selection item:', sel);
-            continue;
-          }
-
-          for (const runtimeId of runtimeIds) {
+          for (const rid of runtimeIds) {
             try {
-              const props = await tcApi.model.getProperties(runtimeId);
-              // Looser detection - if it has Length or Size, likely rebar
+              const props = await tcApi.model.getProperties(rid);
               if (props['Length'] || props['Size'] || props['Serial number'] || props['Shape code']) {
-                allRebar.push({ id: runtimeId, props });
+                allRebar.push({ id: rid, props });
               }
             } catch (e) {
-              console.warn('Failed to get properties for runtimeId:', runtimeId, e);
+              console.warn('Skipped runtimeId:', rid, e);
             }
           }
         }
 
         if (allRebar.length === 0) {
-          throw new Error('No rebar detected. The selected bars may not have expected properties, or selection format issue. Try selecting one bar and run the test extension to see properties.');
+          throw new Error('No rebar detected in selection. Run Debug Selection to see what is returned.');
         }
 
         const groupMap = {};
@@ -222,6 +283,7 @@
       }
     }
 
+    document.getElementById('debug').onclick = debugSelection;
     document.getElementById('refresh').onclick = processRebar;
     document.getElementById('clear').onclick = clearMarkups;
     document.getElementById('labelSelected').onclick = () => selectedGroup && labelGroup(selectedGroup, true);
