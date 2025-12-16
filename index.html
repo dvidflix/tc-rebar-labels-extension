@@ -28,7 +28,7 @@
 
   <label><strong>Label Template</strong> (use {PropertyName} placeholders - exact case!):</label>
   <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm</textarea>
-  <p><small>Detected properties in your model: Serial number, Size, Length, Shape code, Rebar mark, Start Point X/Y, End Point X/Y, etc.<br>Try adding {Rebar mark}, {Shape code}, {Start Point X}, etc.</small></p>
+  <p><small>Detected properties: Serial number, Size, Length, Shape code, Rebar mark, Start Point X/Y, End Point X/Y, etc.<br>Examples: {Rebar mark}, {Shape code}, {Start Point X}</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
   <button id="labelSelected" disabled>Label Selected Group</button>
@@ -99,10 +99,9 @@
       const props = group.sampleProps;
       let text = document.getElementById('template').value;
 
-      // Comprehensive property mapping - add more if needed
       const map = {
         'Serial number': props['Serial number'] || 'N/A',
-        'Rebar mark': props['Rebar mark'] || props['Mark'] || '',
+        'Rebar mark': props['Rebar mark'] || '',
         'Size': props['Size'] || '',
         'Length': (props['Length'] || 0).toFixed(0),
         'Shape code': props['Shape code'] || '',
@@ -116,7 +115,6 @@
         text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
       }
 
-      // Clean up any unfound placeholders
       text = text.replace(/\{[^}]+\}/g, '');
 
       const bounds = await tcApi.viewer.getObjectBounds(group.objectIds);
@@ -139,41 +137,34 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Fetching loaded models...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5">Fetching objects from loaded models...</td></tr>';
       document.getElementById('status').textContent = 'Processing...';
       document.getElementById('status').classList.remove('good', 'error');
 
       try {
-        // Correct way: First get all loaded models, then get objects per model
-        const loadedModels = await tcApi.viewer.getLoadedModels ? await tcApi.viewer.getLoadedModels() : [];
+        // Reliable method: Directly get all objects from all currently loaded models
+        const allObjects = await tcApi.viewer.getObjects();
 
-        if (loadedModels.length === 0) {
-          throw new Error('No models are currently loaded in the 3D viewer. Please load your rebar model first.');
+        if (allObjects.length === 0) {
+          throw new Error('No objects found in the viewer. Make sure your rebar model is fully loaded in the 3D viewer tab.');
         }
 
         let allRebar = [];
-        for (const model of loadedModels) {
-          const modelId = model.id || model.modelId;
-          const objects = await tcApi.viewer.getObjects(modelId);
-
-          for (const obj of objects) {
-            try {
-              const props = await tcApi.model.getProperties(obj.id);
-              // Detection based on your exact property names
-              if (props['Serial number'] || props['Rebar mark'] || (props['Size'] && props['Length'])) {
-                allRebar.push({ id: obj.id, props, modelId });
-              }
-            } catch (e) {
-              // Skip objects with inaccessible properties
+        for (const obj of allObjects) {
+          try {
+            const props = await tcApi.model.getProperties(obj.id);
+            if (props['Serial number'] || props['Rebar mark'] || (props['Size'] && props['Length'])) {
+              allRebar.push({ id: obj.id, props });
             }
+          } catch (e) {
+            // Skip objects with inaccessible properties
           }
         }
 
         if (allRebar.length === 0) {
-          throw new Error('No rebar detected. The model may use slightly different property names or the rebar is not recognized as IfcReinforcingBar. Try selecting one bar and checking its exact property names.');
+          throw new Error('No rebar elements detected. Verify exact property names by selecting a single bar in the viewer.');
         }
 
-        // Grouping by Serial number (primary), Size, and Length
         const groupMap = {};
         for (const item of allRebar) {
           const p = item.props;
@@ -200,7 +191,6 @@
           g.totalLength = (g.length * g.quantity).toFixed(0);
         });
 
-        // Render table
         tbody.innerHTML = '';
         groups.forEach(group => {
           const tr = document.createElement('tr');
