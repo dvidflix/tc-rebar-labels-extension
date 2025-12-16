@@ -3,63 +3,38 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rebar Labels Extension</title>
+  <title>Trimble Connect API Test Extension</title>
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
     h1 { color: #1a5fb4; }
-    button { padding: 10px 16px; margin: 5px; background: #1a5fb4; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button { padding: 10px 16px; margin: 10px 5px; background: #1a5fb4; color: white; border: none; border-radius: 4px; cursor: pointer; }
     button:hover { background: #144a8a; }
-    button:disabled { background: #aaa; cursor: not-allowed; }
-    textarea { padding: 8px; margin: 10px 0; width: 100%; box-sizing: border-box; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-    th { background: #1a5fb4; color: white; }
-    tr:hover { background: #f0f5ff; cursor: pointer; }
-    .selected { background: #d0e4ff !important; }
+    pre { background: #eee; padding: 10px; border-radius: 4px; max-height: 400px; overflow: auto; }
     .status { margin: 10px 0; font-weight: bold; }
     .good { color: #008000; }
     .error { color: #d00000; }
   </style>
 </head>
 <body>
-  <h1>Rebar Labels Extension</h1>
+  <h1>Trimble Connect API Test Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <label><strong>Label Template</strong> (use {PropertyName} placeholders - exact case!):</label>
-  <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm</textarea>
-  <p><small>Known properties: Serial number, Size, Length, Shape code, Rebar mark, Start Point X/Y, End Point X/Y.<br>Use exactly as shown, e.g. {Serial number}, {Size}.</small></p>
+  <button id="testConnection">Test Connection & Basic Info</button>
+  <button id="testSelection">Test Current Selection (select something first!)</button>
+  <button id="testAllObjects">Test Get All Objects (if supported)</button>
 
-  <button id="refresh">Refresh Rebar Data</button>
-  <button id="labelSelected" disabled>Label Selected Group</button>
-  <button id="labelAll" disabled>Label All Groups</button>
-  <button id="clear" disabled>Clear Labels</button>
-
-  <table id="rebarTable">
-    <thead>
-      <tr>
-        <th>Mark/Serial</th>
-        <th>Diameter/Size</th>
-        <th>Length</th>
-        <th>Qty</th>
-        <th>Total Length</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <h3>Results:</h3>
+  <pre id="output">No tests run yet.</pre>
 
   <script>
-    let tcApi;
-    let groups = [];
-    let markupIds = [];
-    let selectedGroup = null;
+    let tcApi = null;
 
     async function init() {
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
-        document.getElementById('status').textContent = 'Connected! Load your rebar model in the 3D viewer, select one rebar bar to verify properties if needed, then click Refresh.';
+        document.getElementById('status').textContent = 'Connected successfully!';
         document.getElementById('status').classList.add('good');
-        document.getElementById('status').classList.remove('error');
       } catch (err) {
         document.getElementById('status').textContent = 'Connection failed: ' + err.message;
         document.getElementById('status').classList.add('error');
@@ -67,174 +42,115 @@
       }
     }
 
-    async function clearMarkups() {
-      for (const id of markupIds) {
-        await tcApi.viewer.markup.removeMarkup(id).catch(() => {});
-      }
-      markupIds = [];
+    function log(message) {
+      const output = document.getElementById('output');
+      output.textContent += message + '\n';
+      console.log(message);
     }
 
-    async function addCallout(anchor, labelPos, text) {
-      const arrowId = await tcApi.viewer.markup.addArrowMarkup({
-        start: labelPos,
-        end: anchor,
-        color: { r: 255, g: 255, b: 255 },
-        width: 4
-      });
-      markupIds.push(arrowId);
-
-      const textId = await tcApi.viewer.markup.addTextMarkup({
-        text: text,
-        position: labelPos,
-        color: { r: 0, g: 0, b: 0 },
-        backgroundColor: { r: 255, g: 255, b: 255, a: 0.9 },
-        fontSize: 36
-      });
-      markupIds.push(textId);
-    }
-
-    async function labelGroup(group, isOnly = false) {
-      if (isOnly) await clearMarkups();
-
-      const props = group.sampleProps;
-      let text = document.getElementById('template').value;
-
-      const map = {
-        'Serial number': props['Serial number'] || 'N/A',
-        'Rebar mark': props['Rebar mark'] || '',
-        'Size': props['Size'] || '',
-        'Length': (props['Length'] || 0).toFixed(0),
-        'Shape code': props['Shape code'] || '',
-        'Start Point X': props['Start Point X'] || '',
-        'Start Point Y': props['Start Point Y'] || '',
-        'End Point X': props['End Point X'] || '',
-        'End Point Y': props['End Point Y'] || '',
-      };
-
-      for (const [key, value] of Object.entries(map)) {
-        text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
+    async function testConnection() {
+      document.getElementById('output').textContent = 'Running connection test...\n';
+      if (!tcApi) {
+        log('ERROR: Not connected. Reload the extension.');
+        return;
       }
 
-      text = text.replace(/\{[^}]+\}/g, '');
+      log('Connection OK: tcApi object available.');
 
-      const bounds = await tcApi.viewer.getObjectBounds(group.objectIds);
-      const anchor = {
-        x: (bounds.min.x + bounds.max.x) / 2,
-        y: (bounds.min.y + bounds.max.y) / 2,
-        z: (bounds.min.z + bounds.max.z) / 2
-      };
-      const labelPos = { x: anchor.x, y: anchor.y + 1.0, z: anchor.z + 3.0 };
+      // Basic viewer checks
+      if (tcApi.viewer) {
+        log('Viewer API available.');
 
-      await addCallout(anchor, labelPos, text);
+        // Try getSelection (most reliable)
+        try {
+          const selection = await tcApi.viewer.getSelection();
+          log(`Current selection: ${selection.length} items`);
+          if (selection.length > 0) {
+            log('Example selected item: ' + JSON.stringify(selection[0], null, 2));
+          }
+        } catch (e) {
+          log('getSelection failed: ' + e.message);
+        }
+
+        // Try getObjects with no args
+        try {
+          const allObjs = await tcApi.viewer.getObjects();
+          log(`getObjects() returned ${allObjs.length} objects (all loaded models)`);
+        } catch (e) {
+          log('getObjects() failed (may require modelId): ' + e.message);
+        }
+
+        // Try getLoadedModels if exists
+        if (typeof tcApi.viewer.getLoadedModels === 'function') {
+          try {
+            const models = await tcApi.viewer.getLoadedModels();
+            log(`Loaded models: ${models.length}`);
+          } catch (e) {
+            log('getLoadedModels failed: ' + e.message);
+          }
+        } else {
+          log('getLoadedModels not available on viewer API.');
+        }
+      } else {
+        log('No tcApi.viewer - not in 3D viewer context?');
+      }
+
+      // Test model properties on a selected object
+      if (tcApi.model) {
+        log('Model API available for properties.');
+      }
     }
 
-    async function processRebar() {
-      await clearMarkups();
-      groups = [];
-      selectedGroup = null;
-      document.getElementById('labelSelected').disabled = true;
-      document.getElementById('labelAll').disabled = true;
-      document.getElementById('clear').disabled = true;
-
-      const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Fetching current selection...</td></tr>';
-      document.getElementById('status').textContent = 'Processing selected objects...';
-      document.getElementById('status').classList.remove('good', 'error');
+    async function testSelection() {
+      document.getElementById('output').textContent = 'Testing selection...\n';
+      if (!tcApi || !tcApi.viewer) {
+        log('Not connected or no viewer.');
+        return;
+      }
 
       try {
-        // Use the current selection in the viewer as the source of rebar objects
         const selection = await tcApi.viewer.getSelection();
-
+        log(`Selection has ${selection.length} objects.`);
         if (selection.length === 0) {
-          throw new Error('No objects selected in the viewer. Please select all rebar objects (or a selection containing rebar) before clicking Refresh.');
+          log('Select one or more objects (e.g., a yellow rebar bar) in the 3D viewer first!');
+          return;
         }
 
-        let allRebar = [];
-        for (const sel of selection) {
+        for (let i = 0; i < Math.min(3, selection.length); i++) {
+          const sel = selection[i];
+          log(`Object ${i+1}: ID = ${sel.objectId || sel.id}`);
+
           try {
-            const props = await tcApi.model.getProperties(sel.objectId);
-            // Detect rebar based on your known properties
-            if (props['Serial number'] || props['Size'] || props['Length'] || props['Shape code']) {
-              allRebar.push({ id: sel.objectId, props });
-            }
-          } catch (e) {
-            // Skip if properties can't be fetched
+            const props = await tcApi.model.getProperties(sel.objectId || sel.id);
+            log(`Properties fetched successfully (${Object.keys(props).length} properties):`);
+            log(JSON.stringify(props, null, 2));
+          } catch (propErr) {
+            log(`Failed to get properties for this object: ${propErr.message}`);
           }
         }
-
-        if (allRebar.length === 0) {
-          throw new Error('No rebar detected in the selected objects. Select one or more yellow rebar bars and try again. Make sure the properties include "Serial number", "Size", "Length", etc.');
-        }
-
-        // Grouping logic
-        const groupMap = {};
-        for (const item of allRebar) {
-          const p = item.props;
-          const mark = p['Serial number'] || p['Rebar mark'] || 'Unknown';
-          const dia = p['Size'] || '';
-          const len = Math.round(parseFloat(p['Length']) || 0);
-          const key = `${mark}|${dia}|${len}`;
-
-          if (!groupMap[key]) {
-            groupMap[key] = {
-              mark,
-              diameter: dia,
-              length: len,
-              objectIds: [],
-              sampleProps: p
-            };
-          }
-          groupMap[key].objectIds.push(item.id);
-        }
-
-        groups = Object.values(groupMap);
-        groups.forEach(g => {
-          g.quantity = g.objectIds.length;
-          g.totalLength = (g.length * g.quantity).toFixed(0);
-        });
-
-        // Render table
-        tbody.innerHTML = '';
-        groups.forEach(group => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${group.mark}</td>
-            <td>${group.diameter}</td>
-            <td>${group.length}</td>
-            <td>${group.quantity}</td>
-            <td>${group.totalLength}</td>
-          `;
-          tr.onclick = async () => {
-            document.querySelectorAll('#rebarTable tr').forEach(r => r.classList.remove('selected'));
-            tr.classList.add('selected');
-            selectedGroup = group;
-            document.getElementById('labelSelected').disabled = false;
-
-            await tcApi.viewer.isolate({ objectIds: group.objectIds });
-            await tcApi.viewer.zoomTo({ objectIds: group.objectIds });
-          };
-          tbody.appendChild(tr);
-        });
-
-        document.getElementById('labelAll').disabled = false;
-        document.getElementById('clear').disabled = false;
-        document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${allRebar.length} selected bars.`;
-        document.getElementById('status').classList.add('good');
-      } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="5">Error: ${err.message}</td></tr>`;
-        document.getElementById('status').textContent = 'Failed: ' + err.message;
-        document.getElementById('status').classList.add('error');
-        console.error(err);
+      } catch (e) {
+        log('Error getting selection: ' + e.message);
       }
     }
 
-    document.getElementById('refresh').onclick = processRebar;
-    document.getElementById('clear').onclick = clearMarkups;
-    document.getElementById('labelSelected').onclick = () => selectedGroup && labelGroup(selectedGroup, true);
-    document.getElementById('labelAll').onclick = async () => {
-      await clearMarkups();
-      for (const g of groups) await labelGroup(g);
-    };
+    async function testAllObjects() {
+      document.getElementById('output').textContent = 'Trying to get all objects...\n';
+      if (!tcApi || !tcApi.viewer) return;
+
+      try {
+        const objs = await tcApi.viewer.getObjects();
+        log(`Success! getObjects() returned ${objs.length} objects from all loaded models.`);
+        if (objs.length > 0) {
+          log('First object example: ' + JSON.stringify(objs[0], null, 2));
+        }
+      } catch (e) {
+        log('getObjects() failed: ' + e.message + ' (common if no models loaded or API requires modelId)');
+      }
+    }
+
+    document.getElementById('testConnection').onclick = testConnection;
+    document.getElementById('testSelection').onclick = testSelection;
+    document.getElementById('testAllObjects').onclick = testAllObjects;
 
     init();
   </script>
