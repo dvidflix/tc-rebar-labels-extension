@@ -17,7 +17,7 @@
     th { background: #1a5fb4; color: white; }
     tr:hover { background: #f0f5ff; cursor: pointer; }
     .selected { background: #d0e4ff !important; }
-    .status { margin: 10px 0; font-weight: bold; color: #d00; }
+    .status { margin: 10px 0; font-weight: bold; }
     .good { color: #008000; }
   </style>
 </head>
@@ -27,7 +27,7 @@
 
   <label><strong>Label Template</strong> (use {PropertyName} placeholders):</label>
   <textarea id="template" rows="3">[ {Serial Number} ] H {Start Point X} ; V {Start Point Y}</textarea>
-  <p><small>Tries common rebar properties: Serial Number, Position Number, Mark, Nominal Diameter, Diameter, Length, Start Point X/Y, H, V, etc.</small></p>
+  <p><small>Tries common properties: Serial Number, Position Number, Mark, Nominal Diameter, Diameter, Length, Start Point X/Y, H, V, etc.</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
   <button id="labelSelected" disabled>Label Selected Group</button>
@@ -56,7 +56,7 @@
     async function init() {
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
-        document.getElementById('status').textContent = 'Connected! Load your rebar model in the 3D viewer tab, then click Refresh.';
+        document.getElementById('status').textContent = 'Connected! Open the 3D viewer tab, load your rebar model, then click Refresh.';
         document.getElementById('status').classList.add('good');
       } catch (err) {
         document.getElementById('status').textContent = 'Connection failed: ' + err.message;
@@ -96,7 +96,6 @@
       const props = group.sampleProps;
       let text = document.getElementById('template').value;
 
-      // Expanded property mapping
       const map = {
         'Serial Number': props['Serial Number'] || props['Position Number'] || props['Mark'] || 'N/A',
         'Position Number': props['Position Number'] || props['Mark'] || '',
@@ -119,7 +118,7 @@
         y: (bounds.min.y + bounds.max.y) / 2,
         z: (bounds.min.z + bounds.max.z) / 2
       };
-      const labelPos = { x: anchor.x, y: anchor.y, z: anchor.z + 2.0 }; // Higher offset
+      const labelPos = { x: anchor.x, y: anchor.y, z: anchor.z + 2.0 };
 
       await addCallout(anchor, labelPos, text);
     }
@@ -133,36 +132,36 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Scanning all objects for rebar...</td></tr>';
-      document.getElementById('status').textContent = 'Processing... this may take 10-30 seconds for large models.';
+      tbody.innerHTML = '<tr><td colspan="5">Fetching loaded models...</td></tr>';
+      document.getElementById('status').textContent = 'Processing...';
 
       try {
-        const models = await tcApi.model.getModels();
-        if (models.length === 0) throw new Error('No models loaded');
+        // FIXED: Use viewer.getLoadedModels()
+        const models = await tcApi.viewer.getLoadedModels();
+        if (models.length === 0) throw new Error('No models loaded in the 3D viewer');
 
-        let allObjects = [];
+        let allRebar = [];
         for (const model of models) {
-          // Get ALL objects (no type filter to avoid missing rebars)
-          const objects = await tcApi.viewer.getObjects(model.id); // Changed to viewer.getObjects
+          // FIXED: Use viewer.getObjects(model.id)
+          const objects = await tcApi.viewer.getObjects(model.id);
           for (const obj of objects) {
             try {
               const props = await tcApi.model.getProperties(obj.id);
-              // Simple rebar detection: has mark/serial + diameter/length
-              const hasMark = props['Position Number'] || props['Mark'] || props['Serial Number'];
+              const hasMark = props['Serial Number'] || props['Position Number'] || props['Mark'];
               const hasDia = props['Nominal Diameter'] || props['Diameter'];
               const hasLen = props['Length'];
               if (hasMark || (hasDia && hasLen)) {
-                allObjects.push({ id: obj.id, props });
+                allRebar.push({ id: obj.id, props });
               }
-            } catch (e) {} // Skip if properties fail
+            } catch (e) {} // Skip inaccessible objects
           }
         }
 
-        if (allObjects.length === 0) throw new Error('No rebar-like objects found (check properties)');
+        if (allRebar.length === 0) throw new Error('No rebar found – check property names or model');
 
-        // Group by mark + diameter + length
+        // Grouping logic (same as before)
         const groupMap = {};
-        for (const item of allObjects) {
+        for (const item of allRebar) {
           const p = item.props;
           const mark = p['Serial Number'] || p['Position Number'] || p['Mark'] || 'Unknown';
           const dia = p['Nominal Diameter'] || p['Diameter'] || '';
@@ -211,10 +210,10 @@
 
         document.getElementById('labelAll').disabled = false;
         document.getElementById('clear').disabled = false;
-        document.getElementById('status').textContent = `Success! Found ${groups.length} rebar groups (${allObjects.length} bars). Click a row to select.`;
+        document.getElementById('status').textContent = `Success! Found ${groups.length} groups (${allRebar.length} bars).`;
         document.getElementById('status').classList.add('good');
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="5">Error: ' + err.message + '</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="5">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
       }
     }
