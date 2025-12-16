@@ -1,37 +1,55 @@
-<script src="https://unpkg.com/trimble-connect-workspace-api@latest"></script>
-<script>
-  let tcApi;
-  const statusEl = document.getElementById('status');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rebar Labels Demo</title>
+  <script src="https://unpkg.com/trimble-connect-workspace-api@latest"></script>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    button { padding: 10px; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>Rebar Labels Extension</h1>
+  <p>Status: <span id="status">Connecting...</span></p>
+  <button id="testButton" disabled>Test Viewer Connection</button>
 
-  async function init() {
-    try {
-      tcApi = await connect(window.parent);
-      statusEl.textContent = 'Connected! Ready to go.';
-      
-      // Optional: Add a nice menu button
-      await tcApi.ui.setMenu({
-        title: 'Rebar Labels',
-        command: 'refresh'
-      });
+  <script src="https://unpkg.com/trimble-connect-workspace-api@latest"></script>
+  <script>
+    let tcApi;
+    const statusEl = document.getElementById('status');
 
-      // Enable any buttons
-      document.getElementById('testButton')?.removeAttribute('disabled');
-    } catch (err) {
-      statusEl.textContent = 'Connection failed: ' + err.message;
-      console.error(err);
+    async function init() {
+      try {
+        tcApi = await connect(window.parent);
+        statusEl.textContent = 'Connected! Ready to go.';
+        
+        // Optional: Add a nice menu button
+        await tcApi.ui.setMenu({
+          title: 'Rebar Labels',
+          command: 'refresh'
+        });
+
+        // Enable any buttons
+        document.getElementById('testButton')?.removeAttribute('disabled');
+      } catch (err) {
+        statusEl.textContent = 'Connection failed: ' + err.message;
+        console.error(err);
+      }
     }
-  }
 
-  // Add your test button handler here
-  document.getElementById('testButton')?.addEventListener('click', async () => {
-    if (!tcApi) return alert('Not connected yet');
-    try {
-      const models = await tcApi.model.getModels();
-      alert(`Found ${models.length} loaded model(s)!`);
-    } catch (err) {
-      alert('Error: ' + err.message);
-    }
-  });
+    // Add your test button handler here
+    document.getElementById('testButton')?.addEventListener('click', async () => {
+      if (!tcApi) return alert('Not connected yet');
+      try {
+        const models = await tcApi.model.getModels();
+        alert(`Found ${models.length} loaded model(s)!`);
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    });
 
-  init();
-</script>
+    init();
+  </script>
+</body>
+</html>
