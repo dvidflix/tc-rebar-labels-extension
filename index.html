@@ -26,11 +26,11 @@
   <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Instructions:</strong> Select one or more yellow rebar bars (or all rebar) in the 3D viewer, then click Refresh.</p>
+  <p><strong>Important:</strong> Select one or more yellow rebar bars in the 3D viewer before clicking Refresh. For best results, use box/lasso selection to select many or all rebar bars.</p>
 
-  <label><strong>Label Template</strong> (use {Property Name} - exact case and spaces!):</label>
+  <label><strong>Label Template</strong> (use exact property names with { } - case and spaces matter!):</label>
   <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm</textarea>
-  <p><small>Known properties: Serial number, Size, Length, Shape code, Rebar mark, Start Point X, Start Point Y, etc.</small></p>
+  <p><small>Known properties from your model: Serial number, Size, Length, Shape code, Rebar mark, Start Point X, Start Point Y, End Point X, End Point Y.</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
   <button id="labelSelected" disabled>Label Selected Group</button>
@@ -59,7 +59,7 @@
     async function init() {
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
-        document.getElementById('status').textContent = 'Connected! Select rebar bars in the viewer, then click Refresh.';
+        document.getElementById('status').textContent = 'Connected! Select yellow rebar bars in the viewer, then click Refresh.';
         document.getElementById('status').classList.add('good');
       } catch (err) {
         document.getElementById('status').textContent = 'Connection failed: ' + err.message;
@@ -85,7 +85,7 @@
       markupIds.push(arrowId);
 
       const textId = await tcApi.viewer.markup.addTextMarkup({
-        text: text,
+        text: text || 'Label',
         position: labelPos,
         color: { r: 0, g: 0, b: 0 },
         backgroundColor: { r: 255, g: 255, b: 255, a: 0.9 },
@@ -100,15 +100,12 @@
       const props = group.sampleProps;
       let text = document.getElementById('template').value;
 
-      // Replace placeholders with exact property names (case and spaces matter!)
+      // Dynamically replace any {Property Name} with its value
       for (const [key, value] of Object.entries(props)) {
         text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
       }
 
-      // Remove any remaining unfound placeholders
-      text = text.replace(/\{[^}]+\}/g, '').trim();
-
-      if (!text) text = 'No label text';
+      text = text.replace(/\{[^}]+\}/g, '').trim(); // Remove unused placeholders
 
       const bounds = await tcApi.viewer.getObjectBounds(group.objectIds);
       const anchor = {
@@ -130,35 +127,37 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Fetching selected objects...</td></tr>';
-      document.getElementById('status').textContent = 'Processing selected rebar...';
+      tbody.innerHTML = '<tr><td colspan="5">Processing selected objects...</td></tr>';
+      document.getElementById('status').textContent = 'Processing...';
       document.getElementById('status').classList.remove('good', 'error');
 
       try {
         const selection = await tcApi.viewer.getSelection();
 
         if (selection.length === 0) {
-          throw new Error('No objects selected. Select one or more yellow rebar bars in the 3D viewer first.');
+          throw new Error('Nothing selected. Please select one or more yellow rebar bars in the 3D viewer.');
         }
 
         let allRebar = [];
         for (const sel of selection) {
-          const objectId = sel.objectId || sel.id; // Handle possible formats
-          const modelId = sel.modelId;
+          // Handle runtime IDs format from your test: objectRuntimeIds array
+          const runtimeIds = sel.objectRuntimeIds || [sel.objectId || sel.id];
+          const modelId = sel.modelId || sel.modelID;
 
-          try {
-            const props = await tcApi.model.getProperties(objectId);
-            // Detect rebar if it has typical properties
-            if (props['Serial number'] || props['Size'] || props['Length'] || props['Shape code']) {
-              allRebar.push({ id: objectId, props, modelId });
+          for (const runtimeId of runtimeIds) {
+            try {
+              const props = await tcApi.model.getProperties(runtimeId); // Use runtime ID directly
+              if (props['Serial number'] || props['Size'] || props['Length'] || props['Shape code']) {
+                allRebar.push({ id: runtimeId, props });
+              }
+            } catch (e) {
+              console.warn('Skipped runtime ID (no props):', runtimeId);
             }
-          } catch (e) {
-            console.warn('Skipped object (no props):', objectId);
           }
         }
 
         if (allRebar.length === 0) {
-          throw new Error('No rebar detected in selection. Select yellow rebar bars and ensure they have properties like "Serial number", "Size", "Length".');
+          throw new Error('No rebar found in selection. Make sure you selected yellow rebar bars (they have "Serial number", "Size", "Length"). Try selecting just one bar first.');
         }
 
         // Grouping
@@ -205,6 +204,7 @@
             selectedGroup = group;
             document.getElementById('labelSelected').disabled = false;
 
+            // Isolate and zoom using runtime IDs
             await tcApi.viewer.isolate({ objectIds: group.objectIds });
             await tcApi.viewer.zoomTo({ objectIds: group.objectIds });
           };
@@ -213,7 +213,7 @@
 
         document.getElementById('labelAll').disabled = false;
         document.getElementById('clear').disabled = false;
-        document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${allRebar.length} selected bars.`;
+        document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${allRebar.length} bars.`;
         document.getElementById('status').classList.add('good');
       } catch (err) {
         tbody.innerHTML = `<tr><td colspan="5">Error: ${err.message}</td></tr>`;
