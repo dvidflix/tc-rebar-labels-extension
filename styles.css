@@ -40,18 +40,50 @@ body {
   background: #f0f0f0;
 }
 
+.header-actions button.active {
+  background: #dcedf9;
+}
+
 .header-actions button img {
   height: 20px;
 }
 
-/* Actions */
-.actions {
-  padding: 10px 20px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  background: #fff;
-  border-bottom: 1px solid #ddd;
+/* Sort Popup */
+.sort-popup {
+  display: none;
+  position: absolute;
+  background: white;
+  border: 1px solid #ddd;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  z-index: 1000;
+  min-width: 180px;
+  right: 20px;
+}
+
+.sort-popup-content {
+  padding: 8px 0;
+}
+
+.sort-popup-content h4 {
+  margin: 0 12px 8px;
+  font-size: 14px;
+  color: #333;
+}
+
+.sort-popup-content ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sort-popup-content li {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.sort-popup-content li:hover {
+  background: #f0f0f0;
 }
 
 /* Table - 24px group rows, 18px child rows */
@@ -103,14 +135,10 @@ tr.child-row.selected { background: #d0e4ff !important; }
 .child-row td:nth-child(2),
 .child-row td:nth-child(7),
 .child-row td:nth-child(8),
-.child-row td:nth-child(9) {
+.child-row td:nth-child(9),
+.child-row td:nth-child(10) {
   background: #e0e1e9;
   color: #666;
-}
-
-/* Child row Count column empty */
-.child-row td:nth-child(10) {
-  background: white;
 }
 
 /* Alignment */
@@ -124,7 +152,7 @@ tr.child-row.selected { background: #d0e4ff !important; }
   vertical-align: middle;
 }
 
-/* Empty cells */
+/* Empty cells - "--" text */
 .empty-cell {
   color: #999;
   font-style: italic;
