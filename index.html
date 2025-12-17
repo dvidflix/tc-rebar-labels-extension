@@ -3,67 +3,38 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rebar Labels Extension</title>
+  <title>Rebar Labels Extension - Final Debug</title>
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
     h1 { color: #1a5fb4; }
     button { padding: 10px 16px; margin: 5px; background: #1a5fb4; color: white; border: none; border-radius: 4px; cursor: pointer; }
     button:hover { background: #144a8a; }
-    button:disabled { background: #aaa; cursor: not-allowed; }
-    textarea { padding: 8px; margin: 10px 0; width: 100%; box-sizing: border-box; }
-    pre { background: #eee; padding: 10px; border-radius: 4px; max-height: 400px; overflow: auto; white-space: pre-wrap; font-size: 13px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-    th { background: #1a5fb4; color: white; }
-    tr:hover { background: #f0f5ff; cursor: pointer; }
-    .selected { background: #d0e4ff !important; }
+    pre { background: #eee; padding: 10px; border-radius: 4px; max-height: 500px; overflow: auto; white-space: pre-wrap; font-size: 13px; }
     .status { margin: 10px 0; font-weight: bold; }
     .good { color: #008000; }
     .error { color: #d00000; }
   </style>
 </head>
 <body>
-  <h1>Rebar Labels Extension</h1>
+  <h1>Rebar Labels Extension - Final Debug</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Important:</strong> Select one or more yellow rebar bars in the 3D viewer (use box/lasso or click one to test).</p>
+  <p><strong>Step 1:</strong> Select one yellow rebar bar in the 3D viewer.</p>
+  <p><strong>Step 2:</strong> Click the button below to list all available methods on tcApi.viewer.</p>
 
-  <button id="debug">Debug Selection & Properties</button>
-  <button id="refresh">Refresh Rebar Data</button>
-  <button id="labelSelected" disabled>Label Selected Group</button>
-  <button id="labelAll" disabled>Label All Groups</button>
-  <button id="clear" disabled>Clear Labels</button>
+  <button id="listMethods">List All Viewer API Methods</button>
 
-  <h3>Debug Output:</h3>
-  <pre id="debugOutput">No debug run yet.</pre>
-
-  <label><strong>Label Template</strong> (use exact property names with { }):</label>
-  <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm</textarea>
-
-  <table id="rebarTable">
-    <thead>
-      <tr>
-        <th>Mark/Serial</th>
-        <th>Diameter/Size</th>
-        <th>Length</th>
-        <th>Qty</th>
-        <th>Total Length</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <h3>Output:</h3>
+  <pre id="output">No run yet.</pre>
 
   <script>
     let tcApi;
-    let groups = [];
-    let markupIds = [];
-    let selectedGroup = null;
 
     async function init() {
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
-        document.getElementById('status').textContent = 'Connected! Select rebar and use Debug first.';
+        document.getElementById('status').textContent = 'Connected successfully!';
         document.getElementById('status').classList.add('good');
       } catch (err) {
         document.getElementById('status').textContent = 'Connection failed: ' + err.message;
@@ -72,210 +43,41 @@
       }
     }
 
-    function logDebug(msg) {
-      const output = document.getElementById('debugOutput');
-      output.textContent += msg + '\n';
-      console.log('DEBUG:', msg);
-    }
+    function listViewerMethods() {
+      const output = document.getElementById('output');
+      output.textContent = 'Listing methods on tcApi.viewer...\n\n';
 
-    async function clearMarkups() {
-      for (const id of markupIds) {
-        await tcApi.viewer.markup.removeMarkup(id).catch(() => {});
+      if (!tcApi || !tcApi.viewer) {
+        output.textContent += 'ERROR: No tcApi.viewer available.';
+        return;
       }
-      markupIds = [];
-    }
 
-    async function addCallout(anchor, labelPos, text) {
-      const arrowId = await tcApi.viewer.markup.addArrowMarkup({
-        start: labelPos,
-        end: anchor,
-        color: { r: 255, g: 255, b: 255 },
-        width: 4
+      const viewer = tcApi.viewer;
+      const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(viewer))
+        .filter(name => typeof viewer[name] === 'function' && name !== 'constructor')
+        .sort();
+
+      output.textContent += 'Found ' + methods.length + ' methods:\n';
+      methods.forEach(m => {
+        output.textContent += '- ' + m + '\n';
       });
-      markupIds.push(arrowId);
 
-      const textId = await tcApi.viewer.markup.addTextMarkup({
-        text: text || 'Label',
-        position: labelPos,
-        color: { r: 0, g: 0, b: 0 },
-        backgroundColor: { r: 255, g: 255, b: 255, a: 0.9 },
-        fontSize: 36
+      output.textContent += '\nAlso checking for "properties" directly on the object:\n';
+      if ('properties' in viewer && typeof viewer.properties === 'function') {
+        output.textContent += 'YES - viewer.properties is a function!\n';
+      } else {
+        output.textContent += 'NO - no properties method.\n';
+      }
+
+      output.textContent += '\nFull keys on viewer object:\n';
+      Object.keys(viewer).forEach(k => {
+        output.textContent += '- ' + k + ' (type: ' + typeof viewer[k] + ')\n';
       });
-      markupIds.push(textId);
+
+      console.log('Viewer methods:', methods);
     }
 
-    async function labelGroup(group, isOnly = false) {
-      if (isOnly) await clearMarkups();
-
-      const props = group.sampleProps;
-      let text = document.getElementById('template').value;
-
-      for (const [key, value] of Object.entries(props)) {
-        text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
-      }
-      text = text.replace(/\{[^}]+\}/g, '').trim();
-
-      const bounds = await tcApi.viewer.getObjectBounds(group.objectIds);
-      const anchor = {
-        x: (bounds.min.x + bounds.max.x) / 2,
-        y: (bounds.min.y + bounds.max.y) / 2,
-        z: (bounds.min.z + bounds.max.z) / 2
-      };
-      const labelPos = { x: anchor.x, y: anchor.y + 1.0, z: anchor.z + 3.0 };
-
-      await addCallout(anchor, labelPos, text);
-    }
-
-    async function debugSelection() {
-      document.getElementById('debugOutput').textContent = '=== DEBUG START ===\n';
-      logDebug('Starting debug...');
-
-      try {
-        const selection = await tcApi.viewer.getSelection();
-        logDebug(`Selection length: ${selection.length}`);
-        logDebug(`Raw selection: ${JSON.stringify(selection, null, 2)}`);
-
-        if (selection.length === 0) {
-          logDebug('No selection - select a rebar bar first.');
-          return;
-        }
-
-        let found = false;
-        for (const sel of selection) {
-          const modelId = sel.modelId || sel.modelID;
-          const runtimeIds = sel.objectRuntimeIds || [];
-          logDebug(`\nModelId: ${modelId}`);
-          logDebug(`RuntimeIds: ${JSON.stringify(runtimeIds)}`);
-
-          if (!modelId || runtimeIds.length === 0) {
-            logDebug('Missing modelId or runtimeIds.');
-            continue;
-          }
-
-          logDebug(`Trying tcApi.viewer.properties(${modelId}, runtimeIds)...`);
-          try {
-            const propsArray = await tcApi.viewer.properties(modelId, runtimeIds);
-            logDebug(`SUCCESS! Got ${propsArray.length} property object(s)`);
-            propsArray.forEach((props, i) => {
-              logDebug(`Properties for runtimeId ${runtimeIds[i]}:`);
-              logDebug(JSON.stringify(props, null, 2));
-            });
-            found = true;
-          } catch (e) {
-            logDebug(`FAILED: ${e.message}`);
-          }
-        }
-
-        if (!found) {
-          logDebug('No properties fetched.');
-        }
-      } catch (err) {
-        logDebug('Debug error: ' + err.message);
-      }
-
-      logDebug('=== DEBUG END ===');
-    }
-
-    async function processRebar() {
-      await clearMarkups();
-      groups = [];
-      selectedGroup = null;
-      document.getElementById('labelSelected').disabled = true;
-      document.getElementById('labelAll').disabled = true;
-      document.getElementById('clear').disabled = true;
-
-      const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Processing...</td></tr>';
-
-      try {
-        const selection = await tcApi.viewer.getSelection();
-        if (selection.length === 0) throw new Error('No selection.');
-
-        let allRebar = [];
-        for (const sel of selection) {
-          const modelId = sel.modelId;
-          const runtimeIds = sel.objectRuntimeIds || [];
-          if (!modelId || runtimeIds.length === 0) continue;
-
-          const propsArray = await tcApi.viewer.properties(modelId, runtimeIds);
-          propsArray.forEach((props, i) => {
-            if (props['Length'] || props['Size'] || props['Serial number']) {
-              allRebar.push({ id: runtimeIds[i], props, modelId });
-            }
-          });
-        }
-
-        if (allRebar.length === 0) throw new Error('No rebar in selection - check Debug.');
-
-        const groupMap = {};
-        for (const item of allRebar) {
-          const p = item.props;
-          const mark = p['Serial number'] || p['Rebar mark'] || 'Unknown';
-          const dia = p['Size'] || '';
-          const len = Math.round(parseFloat(p['Length']) || 0);
-          const key = `${mark}|${dia}|${len}|${item.modelId}`;
-
-          if (!groupMap[key]) {
-            groupMap[key] = {
-              mark,
-              diameter: dia,
-              length: len,
-              objectIds: [],
-              sampleProps: p,
-              modelId: item.modelId
-            };
-          }
-          groupMap[key].objectIds.push(item.id);
-        }
-
-        groups = Object.values(groupMap);
-
-        groups.forEach(g => {
-          g.quantity = g.objectIds.length;
-          g.totalLength = (g.length * g.quantity).toFixed(0);
-        });
-
-        tbody.innerHTML = '';
-        groups.forEach(group => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${group.mark}</td>
-            <td>${group.diameter}</td>
-            <td>${group.length}</td>
-            <td>${group.quantity}</td>
-            <td>${group.totalLength}</td>
-          `;
-          tr.onclick = async () => {
-            document.querySelectorAll('#rebarTable tr').forEach(r => r.classList.remove('selected'));
-            tr.classList.add('selected');
-            selectedGroup = group;
-            document.getElementById('labelSelected').disabled = false;
-
-            await tcApi.viewer.isolate({ modelId: group.modelId, objectIds: group.objectIds });
-            await tcApi.viewer.zoomTo({ modelId: group.modelId, objectIds: group.objectIds });
-          };
-          tbody.appendChild(tr);
-        });
-
-        document.getElementById('labelAll').disabled = false;
-        document.getElementById('clear').disabled = false;
-        document.getElementById('status').textContent = `Success! ${groups.length} groups from ${allRebar.length} bars.`;
-        document.getElementById('status').classList.add('good');
-      } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="5">Error: ${err.message}</td></tr>`;
-        document.getElementById('status').textContent = 'Failed: ' + err.message;
-        document.getElementById('status').classList.add('error');
-      }
-    }
-
-    document.getElementById('debug').onclick = debugSelection;
-    document.getElementById('refresh').onclick = processRebar;
-    document.getElementById('clear').onclick = clearMarkups;
-    document.getElementById('labelSelected').onclick = () => selectedGroup && labelGroup(selectedGroup, true);
-    document.getElementById('labelAll').onclick = async () => {
-      await clearMarkups();
-      for (const g of groups) await labelGroup(g);
-    };
+    document.getElementById('listMethods').onclick = listViewerMethods;
 
     init();
   </script>
