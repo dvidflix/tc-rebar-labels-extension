@@ -19,7 +19,7 @@
     th.sorted-asc::after { content: " ▲"; }
     th.sorted-desc::after { content: " ▼"; }
     tr:hover { background: #f0f5ff; cursor: pointer; }
-    .selected { background: #d0e4ff !important; }
+    tr.selected { background: #d0e4ff !important; }
     .status { margin: 10px 0; font-weight: bold; }
     .good { color: #008000; }
     .error { color: #d00000; }
@@ -32,11 +32,14 @@
   <p><strong>Success!</strong> The extension is working. Select rebar bars and click Refresh.</p>
 
   <label><strong>Label Template</strong> (recommended):</label>
-  <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm ({Rebar mark})</textarea>
-  <p><small>Other useful: {Shape code}, {Name}, {Start Point X}, {Start Point Y}, {End Point X}, {End Point Y}, {Grade}</small></p>
+  <textarea id="template" rows="3">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
+  <p><small>Other useful: {Size}, {Length}, {Rebar mark}, {Shape code}, {End Point X}, {End Point Y}, {Grade}</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
-  <button id="labelSelected" disabled>Label Selected Group</button>
+  <button id="colorGroups">Color Groups (Random)</button>
+  <button id="clearColors">Clear Colors</button>
+  <button id="selectGroups" disabled>Select Selected Groups in Viewer</button>
+  <button id="labelSelected" disabled>Label Selected Groups</button>
   <button id="labelAll" disabled>Label All Groups</button>
   <button id="clear" disabled>Clear Labels</button>
 
@@ -62,8 +65,9 @@
     let tcApi;
     let groups = [];
     let markupIds = [];
-    let selectedGroup = null;
-    let sortDirection = {}; // track sort direction per column
+    let selectedGroups = []; // now array for multiple selection
+    let groupColors = {}; // store color per group key
+    let sortDirection = {};
 
     async function init() {
       try {
@@ -89,7 +93,7 @@
           start: labelPos,
           end: anchor,
           color: { r: 0, g: 0, b: 0 },
-          width: 5
+          width: 6
         });
         markupIds.push(arrowId);
 
@@ -98,8 +102,10 @@
           position: labelPos,
           color: { r: 0, g: 0, b: 0 },
           backgroundColor: { r: 255, g: 255, b: 255, a: 0.95 },
-          fontSize: 40,
-          padding: 10
+          fontSize: 48,
+          padding: 12,
+          borderWidth: 2,
+          borderColor: { r: 0, g: 0, b: 0 }
         });
         markupIds.push(textId);
       } catch (e) {
@@ -125,7 +131,7 @@
         y: (bounds.min.y + bounds.max.y) / 2,
         z: (bounds.min.z + bounds.max.z) / 2
       };
-      const labelPos = { x: anchor.x, y: anchor.y + 2.0, z: anchor.z + 4.0 };
+      const labelPos = { x: anchor.x + 2.0, y: anchor.y + 2.0, z: anchor.z + 5.0 };
 
       await addCallout(anchor, labelPos, text);
     }
@@ -147,17 +153,73 @@
       return flat;
     }
 
+    // Random color generator
+    function randomColor() {
+      return {
+        r: Math.floor(Math.random() * 256),
+        g: Math.floor(Math.random() * 256),
+        b: Math.floor(Math.random() * 256)
+      };
+    }
+
+    // Apply colors to groups
+    async function colorGroups() {
+      await tcApi.viewer.setObjectState([]); // clear all colors first
+
+      for (const group of groups) {
+        const key = `${group.mark}|${group.diameter}|${group.length}|${group.shape}|${group.modelId}`;
+        if (!groupColors[key]) {
+          groupColors[key] = randomColor();
+        }
+        const color = groupColors[key];
+
+        await tcApi.viewer.setObjectState({
+          modelId: group.modelId,
+          objectIds: group.objectIds,
+          color: color
+        });
+      }
+    }
+
+    async function clearColors() {
+      groupColors = {};
+      await tcApi.viewer.setObjectState([]); // reset all colors
+    }
+
+    // Select multiple groups in viewer
+    async function selectSelectedGroups() {
+      if (selectedGroups.length === 0) return;
+
+      let allObjectIds = [];
+      let modelId = selectedGroups[0].modelId;
+
+      for (const group of selectedGroups) {
+        allObjectIds = allObjectIds.concat(group.objectIds);
+      }
+
+      await tcApi.viewer.isolate({ modelId: modelId, objectIds: allObjectIds });
+      await tcApi.viewer.zoomTo({ modelId: modelId, objectIds: allObjectIds });
+    }
+
+    // Label selected groups
+    async function labelSelectedGroups() {
+      if (selectedGroups.length === 0) return;
+      await clearMarkups();
+      for (const group of selectedGroups) {
+        await labelGroup(group);
+      }
+    }
+
     function sortTable(column, dir) {
       groups.sort((a, b) => {
-        let valA = a[column];
-        let valB = b[column];
+        let valA = a[column] ?? '';
+        let valB = b[column] ?? '';
         if (typeof valA === 'string') valA = valA.toLowerCase();
         if (typeof valB === 'string') valB = valB.toLowerCase();
         if (valA < valB) return dir === 'asc' ? -1 : 1;
         if (valA > valB) return dir === 'asc' ? 1 : -1;
         return 0;
       });
-
       renderTable();
     }
 
@@ -178,14 +240,27 @@
           <td>${group.quantity}</td>
           <td>${group.totalLength}</td>
         `;
-        tr.onclick = async () => {
-          document.querySelectorAll('#rebarTable tr').forEach(r => r.classList.remove('selected'));
-          tr.classList.add('selected');
-          selectedGroup = group;
-          document.getElementById('labelSelected').disabled = false;
+        tr.onclick = (e) => {
+          if (e.ctrlKey || e.metaKey) {
+            // Multi-select with Ctrl/Cmd
+            tr.classList.toggle('selected');
+          } else if (e.shiftKey && selectedGroups.length > 0) {
+            // Range select with Shift
+            const rows = Array.from(tbody.children);
+            const currentIndex = rows.indexOf(tr);
+            const lastIndex = rows.indexOf(rows.find(r => r.classList.contains('selected')));
+            const start = Math.min(currentIndex, lastIndex);
+            const end = Math.max(currentIndex, lastIndex);
+            rows.slice(start, end + 1).forEach(r => r.classList.add('selected'));
+          } else {
+            // Single select
+            tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+            tr.classList.add('selected');
+          }
 
-          await tcApi.viewer.isolate({ modelId: group.modelId, objectIds: group.objectIds });
-          await tcApi.viewer.zoomTo({ modelId: group.modelId, objectIds: group.objectIds });
+          selectedGroups = groups.filter((_, i) => tbody.children[i].classList.contains('selected'));
+          document.getElementById('selectGroups').disabled = selectedGroups.length === 0;
+          document.getElementById('labelSelected').disabled = selectedGroups.length === 0;
         };
         tbody.appendChild(tr);
       });
@@ -193,8 +268,10 @@
 
     async function processRebar() {
       await clearMarkups();
+      await clearColors();
       groups = [];
-      selectedGroup = null;
+      selectedGroups = [];
+      document.getElementById('selectGroups').disabled = true;
       document.getElementById('labelSelected').disabled = true;
       document.getElementById('labelAll').disabled = true;
       document.getElementById('clear').disabled = true;
@@ -271,6 +348,7 @@
         });
 
         renderTable();
+        await colorGroups(); // auto color on refresh
 
         document.getElementById('labelAll').disabled = false;
         document.getElementById('clear').disabled = false;
@@ -289,10 +367,9 @@
         const col = th.dataset.sort;
         const currentDir = sortDirection[col] || 'asc';
         const newDir = currentDir === 'asc' ? 'desc' : 'asc';
-        sortDirection = {}; // reset others
+        sortDirection = {};
         sortDirection[col] = newDir;
 
-        // Update arrows
         document.querySelectorAll('th').forEach(h => h.className = '');
         th.className = 'sorted-' + newDir;
 
@@ -301,12 +378,15 @@
     });
 
     document.getElementById('refresh').onclick = processRebar;
-    document.getElementById('clear').onclick = clearMarkups;
-    document.getElementById('labelSelected').onclick = () => selectedGroup && labelGroup(selectedGroup, true);
+    document.getElementById('colorGroups').onclick = colorGroups;
+    document.getElementById('clearColors').onclick = clearColors;
+    document.getElementById('selectGroups').onclick = selectSelectedGroups;
+    document.getElementById('labelSelected').onclick = labelSelectedGroups;
     document.getElementById('labelAll').onclick = async () => {
       await clearMarkups();
       for (const g of groups) await labelGroup(g);
     };
+    document.getElementById('clear').onclick = clearMarkups;
 
     init();
   </script>
