@@ -48,8 +48,8 @@ body {
   height: 20px;
 }
 
-/* More Options Popup */
-.more-popup {
+/* Menu Popup */
+.menu-popup {
   display: none;
   position: absolute;
   top: 60px;
@@ -59,13 +59,21 @@ body {
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   border-radius: 4px;
   z-index: 1000;
+  width: 220px;
 }
 
-.more-popup-content {
-  padding: 8px 0;
+.menu-popup-content {
+  padding: 12px 0;
 }
 
-.more-popup-content button {
+.menu-popup-content h4 {
+  margin: 0 16px 8px;
+  font-size: 14px;
+  color: #333;
+  font-weight: 600;
+}
+
+.menu-popup-content button {
   display: block;
   width: 100%;
   text-align: left;
@@ -76,13 +84,19 @@ body {
   font-size: 14px;
 }
 
-.more-popup-content button:hover {
+.menu-popup-content button:hover {
   background: #f0f0f0;
 }
 
-.more-popup-content button.active {
+.menu-popup-content button.active {
   background: #dcedf9;
   font-weight: 600;
+}
+
+.menu-popup-content hr {
+  margin: 8px 0;
+  border: none;
+  border-top: 1px solid #ddd;
 }
 
 /* Actions */

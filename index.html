@@ -18,17 +18,19 @@
       <button id="refresh" title="Refresh Rebar Data">
         <img src="update.svg" alt="Refresh">
       </button>
-      <button id="moreOptions" title="More Options">
-        <img src="more-vertical.svg" alt="More">
+      <button id="menuButton" title="Menu">
+        <img src="menu.svg" alt="Menu">
       </button>
     </div>
   </div>
 
-  <!-- More Options Popup -->
-  <div id="morePopup" class="more-popup">
-    <div class="more-popup-content">
-      <button id="colorRandom" class="toggle-button">Color Groups (Random)</button>
-      <button id="colorPalette">Color Groups (Default Palette)</button>
+  <!-- Menu Popup -->
+  <div id="menuPopup" class="menu-popup">
+    <div class="menu-popup-content">
+      <h4>Color by:</h4>
+      <button id="colorRandom" class="toggle-button">Random</button>
+      <button id="colorPalette">Default Palette</button>
+      <hr>
       <button id="clearColorsBtn">Clear Colors</button>
     </div>
   </div>
@@ -55,6 +57,7 @@
     <thead>
       <tr>
         <th></th> <!-- Expand -->
+        <th></th> <!-- Color -->
         <th data-sort="mark">Mark</th>
         <th data-sort="startX">Start X</th>
         <th data-sort="startY">Start Y</th>
@@ -91,7 +94,7 @@
     let groupColors = {};
     let sortColumns = [];
     let expandedGroups = new Set();
-    let randomColoringActive = false;
+    let coloringMode = 'none';
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -189,92 +192,63 @@
       return flat;
     }
 
-    // Trimble Default Color Palette (50 colors from your image)
+    // Trimble Default Color Palette (50 colors)
     const defaultPalette = [
-      { r: 0, g: 0, b: 139 },     // 1 dark blue
-      { r: 173, g: 216, b: 230 }, // 2 light blue
-      { r: 255, g: 0, b: 0 },     // 3 red
-      { r: 0, g: 255, b: 255 },   // 4 cyan
-      { r: 0, g: 100, b: 0 },     // 5 dark green
-      { r: 255, g: 255, b: 224 }, // 6 light yellow
-      { r: 128, g: 0, b: 128 },   // 7 purple
-      { r: 0, g: 0, b: 255 },     // 8 blue
-      { r: 255, g: 255, b: 0 },   // 9 yellow
-      { r: 0, g: 128, b: 0 },     // 10 green
-      { r: 255, g: 228, b: 196 }, // 11 bisque
-      { r: 255, g: 165, b: 0 },   // 12 orange
-      { r: 0, g: 128, b: 128 },   // 13 teal
-      { r: 139, g: 0, b: 0 },     // 14 dark red
-      { r: 165, g: 42, b: 42 },   // 15 brown
-      { r: 128, g: 128, b: 128 }, // 16 gray
-      { r: 255, g: 192, b: 203 }, // 17 pink
-      { r: 0, g: 255, b: 0 },     // 18 lime
-      { r: 255, g: 105, b: 180 }, // 19 hot pink
-      { r: 255, g: 140, b: 0 },   // 20 dark orange
-      { r: 220, g: 20, b: 60 },   // 21 crimson
-      { r: 255, g: 99, b: 71 },   // 22 tomato
-      { r: 218, g: 112, b: 214 }, // 23 orchid
-      { r: 30, g: 144, b: 255 },  // 24 dodger blue
-      { r: 50, g: 205, b: 50 },   // 25 lime green
-      { r: 186, g: 85, b: 211 },  // 26 medium orchid
-      { r: 173, g: 255, b: 47 },  // 27 green yellow
-      { r: 60, g: 179, b: 113 },  // 28 medium sea green
-      { r: 255, g: 20, b: 147 },  // 29 deep pink
-      { r: 255, g: 215, b: 0 },   // 30 gold
-      { r: 255, g: 182, b: 193 }, // 31 light pink
-      { r: 139, g: 69, b: 19 },   // 32 saddle brown
-      { r: 0, g: 255, b: 127 },   // 33 spring green
-      { r: 255, g: 160, b: 122 }, // 34 light salmon
-      { r: 255, g: 0, b: 255 },   // 35 magenta
-      { r: 240, g: 230, b: 140 }, // 36 khaki
-      { r: 128, g: 0, b: 0 },     // 37 maroon
-      { r: 0, g: 206, b: 209 },   // 38 dark turquoise
-      { r: 255, g: 228, b: 181 }, // 39 moccasin
-      { r: 199, g: 21, b: 133 },  // 40 medium violet red
-      { r: 255, g: 69, b: 0 },    // 41 orange red
-      { r: 144, g: 238, b: 144 }, // 42 light green
-      { r: 72, g: 209, b: 204 },  // 43 medium turquoise
-      { r: 210, g: 180, b: 140 }, // 44 tan
-      { r: 205, g: 133, b: 63 },  // 45 peru
-      { r: 152, g: 251, b: 152 }, // 46 pale green
-      { r: 250, g: 240, b: 230 }, // 47 linen
-      { r: 160, g: 82, b: 45 },   // 48 sienna
-      { r: 255, g: 245, b: 238 }, // 49 seashell
-      { r: 139, g: 0, b: 139 },   // 50 dark magenta
+      { r: 0, g: 0, b: 139, a: 255 },
+      { r: 173, g: 216, b: 230, a: 255 },
+      { r: 255, g: 0, b: 0, a: 255 },
+      { r: 0, g: 255, b: 255, a: 255 },
+      { r: 0, g: 100, b: 0, a: 255 },
+      { r: 255, g: 255, b: 224, a: 255 },
+      { r: 128, g: 0, b: 128, a: 255 },
+      { r: 0, g: 0, b: 255, a: 255 },
+      { r: 255, g: 255, b: 0, a: 255 },
+      { r: 0, g: 128, b: 0, a: 255 },
+      { r: 255, g: 228, b: 196, a: 255 },
+      { r: 255, g: 165, b: 0, a: 255 },
+      { r: 0, g: 128, b: 128, a: 255 },
+      { r: 139, g: 0, b: 0, a: 255 },
+      { r: 165, g: 42, b: 42, a: 255 },
+      { r: 128, g: 128, b: 128, a: 255 },
+      { r: 255, g: 192, b: 203, a: 255 },
+      { r: 0, g: 255, b: 0, a: 255 },
+      { r: 255, g: 105, b: 180, a: 255 },
+      { r: 255, g: 140, b: 0, a: 255 },
+      { r: 220, g: 20, b: 60, a: 255 },
+      { r: 255, g: 99, b: 71, a: 255 },
+      { r: 218, g: 112, b: 214, a: 255 },
+      { r: 30, g: 144, b: 255, a: 255 },
+      { r: 50, g: 205, b: 50, a: 255 },
+      { r: 186, g: 85, b: 211, a: 255 },
+      { r: 173, g: 255, b: 47, a: 255 },
+      { r: 60, g: 179, b: 113, a: 255 },
+      { r: 255, g: 20, b: 147, a: 255 },
+      { r: 255, g: 215, b: 0, a: 255 },
+      { r: 255, g: 182, b: 193, a: 255 },
+      { r: 139, g: 69, b: 19, a: 255 },
+      { r: 0, g: 255, b: 127, a: 255 },
+      { r: 255, g: 160, b: 122, a: 255 },
+      { r: 255, g: 0, b: 255, a: 255 },
+      { r: 240, g: 230, b: 140, a: 255 },
+      { r: 128, g: 0, b: 0, a: 255 },
+      { r: 0, g: 206, b: 209, a: 255 },
+      { r: 255, g: 228, b: 181, a: 255 },
+      { r: 199, g: 21, b: 133, a: 255 },
+      { r: 255, g: 69, b: 0, a: 255 },
+      { r: 144, g: 238, b: 144, a: 255 },
+      { r: 72, g: 209, b: 204, a: 255 },
+      { r: 210, g: 180, b: 140, a: 255 },
+      { r: 205, g: 133, b: 63, a: 255 },
+      { r: 152, g: 251, b: 152, a: 255 },
+      { r: 250, g: 240, b: 230, a: 255 },
+      { r: 160, g: 82, b: 45, a: 255 },
+      { r: 255, g: 245, b: 238, a: 255 },
+      { r: 139, g: 0, b: 139, a: 255 }
     ];
 
-    async function colorGroupsRandom() {
-      debug('Applying random colors...');
-      try {
-        await tcApi.viewer.setObjectState([]);
-      } catch (e) {}
-
-      groupColors = {};
-
-      for (const group of groups) {
-        const key = group.key;
-        const color = {
-          r: Math.floor(Math.random() * 256),
-          g: Math.floor(Math.random() * 256),
-          b: Math.floor(Math.random() * 256),
-          a: 255
-        };
-        groupColors[key] = color;
-        group.color = color;
-
-        try {
-          await tcApi.viewer.setObjectState({
-            modelId: group.modelId,
-            objectIds: group.objectIds,
-            color: color
-          });
-        } catch (e) {}
-      }
-      renderTable();
-    }
-
-    async function colorGroupsPalette() {
-      debug('Applying default palette colors...');
+    async function applyColoring(mode) {
+      coloringMode = mode;
+      debug('Applying ' + mode + ' colors...');
       try {
         await tcApi.viewer.setObjectState([]);
       } catch (e) {}
@@ -284,10 +258,17 @@
       let paletteIndex = 0;
       for (const group of groups) {
         const key = group.key;
-        const color = defaultPalette[paletteIndex % defaultPalette.length];
+        let color;
+        if (mode === 'random') {
+          color = randomColor();
+        } else if (mode === 'palette') {
+          color = defaultPalette[paletteIndex % defaultPalette.length];
+          paletteIndex++;
+        } else {
+          color = { r: 255, g: 255, b: 255, a: 255 };
+        }
         groupColors[key] = color;
         group.color = color;
-        paletteIndex++;
 
         try {
           await tcApi.viewer.setObjectState({
@@ -301,6 +282,7 @@
     }
 
     async function clearColors() {
+      coloringMode = 'none';
       groupColors = {};
       groups.forEach(g => g.color = null);
       try {
@@ -535,30 +517,40 @@
       debug('=== REFRESH ENDED ===');
     }
 
-    // More Options popup
-    const morePopup = document.getElementById('morePopup');
+    // Menu popup
+    const menuPopup = document.getElementById('menuPopup');
 
-    document.getElementById('moreOptions').onclick = (e) => {
+    document.getElementById('menuButton').onclick = (e) => {
       e.stopPropagation();
-      morePopup.style.display = morePopup.style.display === 'block' ? 'none' : 'block';
+      menuPopup.style.display = menuPopup.style.display === 'block' ? 'none' : 'block';
     };
 
     document.addEventListener('click', () => {
-      morePopup.style.display = 'none';
+      menuPopup.style.display = 'none';
     });
 
     document.getElementById('colorRandom').onclick = () => {
-      randomColoringActive = !randomColoringActive;
-      document.getElementById('colorRandom').classList.toggle('active', randomColoringActive);
-      if (randomColoringActive) {
-        colorGroupsRandom();
-      } else {
+      if (coloringMode === 'random') {
+        coloringMode = 'none';
         clearColors();
+      } else {
+        coloringMode = 'random';
+        applyColoring('random');
       }
+      document.getElementById('colorRandom').classList.toggle('active', coloringMode === 'random');
+      document.getElementById('colorPalette').classList.toggle('active', false);
     };
 
     document.getElementById('colorPalette').onclick = () => {
-      colorGroupsPalette();
+      if (coloringMode === 'palette') {
+        coloringMode = 'none';
+        clearColors();
+      } else {
+        coloringMode = 'palette';
+        applyColoring('palette');
+      }
+      document.getElementById('colorPalette').classList.toggle('active', coloringMode === 'palette');
+      document.getElementById('colorRandom').classList.toggle('active', false);
     };
 
     document.getElementById('clearColorsBtn').onclick = clearColors;
