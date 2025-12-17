@@ -40,7 +40,7 @@
   <button id="refresh">Refresh Rebar Data</button>
   <button id="colorGroups">Color Groups (Random)</button>
   <button id="clearColors">Clear Colors</button>
-  <button id="selectGroups" disabled>Select Selected Groups</button>
+  <button id="selectGroups" disabled>Select & Isolate Selected Groups</button>
   <button id="labelSelected" disabled>Label Selected Groups</button>
   <button id="labelAll" disabled>Label All Groups</button>
   <button id="clear" disabled>Clear Labels</button>
@@ -119,7 +119,7 @@
       if (!text) text = 'Rebar';
 
       try {
-        // Fixed position to avoid getObjectBounds error
+        // Fixed position label to avoid getObjectBounds error
         const textPos = { x: 0, y: 0, z: 5.0 };
         const anchor = { x: 0, y: 0, z: 0 };
 
@@ -142,6 +142,7 @@
           width: 6
         });
         markupIds.push(arrowId);
+        debug('Label added (fixed position)');
       } catch (e) {
         debug('Label error: ' + e.message);
       }
@@ -150,6 +151,7 @@
     async function labelSelectedGroups() {
       if (selectedGroups.length === 0) return;
       await clearMarkups();
+      debug('Labeling selected groups');
       for (const group of selectedGroups) {
         await addLabel(group);
       }
@@ -157,6 +159,7 @@
 
     async function labelAllGroups() {
       await clearMarkups();
+      debug('Labeling all groups');
       for (const group of groups) {
         await addLabel(group);
       }
@@ -188,12 +191,13 @@
     }
 
     async function colorGroups() {
-      debug('Applying random colors...');
+      debug('Applying random colors to groups...');
       try {
-        await tcApi.viewer.setObjectState([]);
+        await tcApi.viewer.setObjectState([]); // clear all colors first
       } catch (e) {
-        debug('setObjectState clear error: ' + e.message);
+        debug('Failed to clear colors: ' + e.message);
       }
+
       groupColors = {};
 
       for (const group of groups) {
@@ -207,12 +211,13 @@
             objectIds: group.objectIds,
             color: groupColors[key]
           });
+          debug(`Colored group ${group.mark} (${group.quantity} bars)`);
         } catch (e) {
-          debug('Coloring error for group: ' + e.message);
+          debug('Coloring error for group ' + group.mark + ': ' + e.message);
         }
       }
       renderTable();
-      debug('Colors applied');
+      debug('Random colors applied');
     }
 
     async function clearColors() {
@@ -229,15 +234,19 @@
 
     async function selectSelectedGroups() {
       if (selectedGroups.length === 0) return;
-      debug('Selecting groups in viewer...');
+      debug('Selecting and isolating selected groups...');
+
       let allIds = [];
       let modelId = selectedGroups[0].modelId;
       selectedGroups.forEach(g => allIds = allIds.concat(g.objectIds));
+
       try {
+        await tcApi.viewer.setSelection({ modelId, objectIds: allIds });
         await tcApi.viewer.isolate({ modelId, objectIds: allIds });
         await tcApi.viewer.zoomTo({ modelId, objectIds: allIds });
+        debug('Selected and isolated ' + allIds.length + ' objects');
       } catch (e) {
-        debug('Isolate/zoom error: ' + e.message);
+        debug('Select/isolate error: ' + e.message);
       }
     }
 
@@ -386,7 +395,7 @@
         });
 
         renderTable();
-        await colorGroups(); // color on refresh
+        await colorGroups();
 
         document.getElementById('labelAll').disabled = false;
         document.getElementById('clear').disabled = false;
