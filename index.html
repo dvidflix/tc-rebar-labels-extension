@@ -14,7 +14,10 @@
     textarea { padding: 8px; margin: 10px 0; width: 100%; box-sizing: border-box; }
     table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
     th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-    th { background: #1a5fb4; color: white; }
+    th { background: #1a5fb4; color: white; cursor: pointer; user-select: none; }
+    th:hover { background: #144a8a; }
+    th.sorted-asc::after { content: " ▲"; }
+    th.sorted-desc::after { content: " ▼"; }
     tr:hover { background: #f0f5ff; cursor: pointer; }
     .selected { background: #d0e4ff !important; }
     .status { margin: 10px 0; font-weight: bold; }
@@ -26,11 +29,11 @@
   <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Success!</strong> The extension is working. Select rebar and click Refresh to group and label.</p>
+  <p><strong>Success!</strong> The extension is working. Select rebar bars and click Refresh.</p>
 
   <label><strong>Label Template</strong> (recommended):</label>
   <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm ({Rebar mark})</textarea>
-  <p><small>Works perfectly with your model. Other useful: {Shape code}, {Name}, {Dim A}, {Grade}</small></p>
+  <p><small>Other useful: {Shape code}, {Name}, {Start Point X}, {Start Point Y}, {End Point X}, {End Point Y}, {Grade}</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
   <button id="labelSelected" disabled>Label Selected Group</button>
@@ -40,11 +43,16 @@
   <table id="rebarTable">
     <thead>
       <tr>
-        <th>Mark/Serial</th>
-        <th>Diameter/Size</th>
-        <th>Length</th>
-        <th>Qty</th>
-        <th>Total Length</th>
+        <th data-sort="mark">Mark/Serial</th>
+        <th data-sort="diameter">Diameter/Size</th>
+        <th data-sort="shape">Shape code</th>
+        <th data-sort="startX">Start X</th>
+        <th data-sort="startY">Start Y</th>
+        <th data-sort="endX">End X</th>
+        <th data-sort="endY">End Y</th>
+        <th data-sort="length">Length</th>
+        <th data-sort="qty">Qty</th>
+        <th data-sort="total">Total Length</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -55,6 +63,7 @@
     let groups = [];
     let markupIds = [];
     let selectedGroup = null;
+    let sortDirection = {}; // track sort direction per column
 
     async function init() {
       try {
@@ -75,22 +84,27 @@
     }
 
     async function addCallout(anchor, labelPos, text) {
-      const arrowId = await tcApi.viewer.markup.addArrowMarkup({
-        start: labelPos,
-        end: anchor,
-        color: { r: 255, g: 255, b: 255 },
-        width: 4
-      });
-      markupIds.push(arrowId);
+      try {
+        const arrowId = await tcApi.viewer.markup.addArrowMarkup({
+          start: labelPos,
+          end: anchor,
+          color: { r: 0, g: 0, b: 0 },
+          width: 5
+        });
+        markupIds.push(arrowId);
 
-      const textId = await tcApi.viewer.markup.addTextMarkup({
-        text: text || 'Rebar',
-        position: labelPos,
-        color: { r: 0, g: 0, b: 0 },
-        backgroundColor: { r: 255, g: 255, b: 255, a: 0.9 },
-        fontSize: 36
-      });
-      markupIds.push(textId);
+        const textId = await tcApi.viewer.markup.addTextMarkup({
+          text: text || 'Rebar',
+          position: labelPos,
+          color: { r: 0, g: 0, b: 0 },
+          backgroundColor: { r: 255, g: 255, b: 255, a: 0.95 },
+          fontSize: 40,
+          padding: 10
+        });
+        markupIds.push(textId);
+      } catch (e) {
+        console.warn('Failed to add markup:', e);
+      }
     }
 
     async function labelGroup(group, isOnly = false) {
@@ -103,6 +117,7 @@
         text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
       }
       text = text.replace(/\{[^}]+\}/g, '').trim();
+      if (!text) text = 'Rebar';
 
       const bounds = await tcApi.viewer.getObjectBounds(group.objectIds);
       const anchor = {
@@ -110,12 +125,11 @@
         y: (bounds.min.y + bounds.max.y) / 2,
         z: (bounds.min.z + bounds.max.z) / 2
       };
-      const labelPos = { x: anchor.x, y: anchor.y + 1.0, z: anchor.z + 3.0 };
+      const labelPos = { x: anchor.x, y: anchor.y + 2.0, z: anchor.z + 4.0 };
 
       await addCallout(anchor, labelPos, text);
     }
 
-    // Improved flattening - handles nested properties correctly
     function flattenProps(props) {
       const flat = {};
       if (!props || !props.properties) return flat;
@@ -124,13 +138,57 @@
         if (pset.properties) {
           pset.properties.forEach(prop => {
             if (prop.value !== undefined) {
+              flat[prop.name] = prop.value;
               flat[pset.name + ' ' + prop.name] = prop.value;
-              flat[prop.name] = prop.value; // also add without pset prefix
             }
           });
         }
       });
       return flat;
+    }
+
+    function sortTable(column, dir) {
+      groups.sort((a, b) => {
+        let valA = a[column];
+        let valB = b[column];
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+        if (valA < valB) return dir === 'asc' ? -1 : 1;
+        if (valA > valB) return dir === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      renderTable();
+    }
+
+    function renderTable() {
+      const tbody = document.querySelector('#rebarTable tbody');
+      tbody.innerHTML = '';
+      groups.forEach(group => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${group.mark}</td>
+          <td>${group.diameter}</td>
+          <td>${group.shape}</td>
+          <td>${group.startX}</td>
+          <td>${group.startY}</td>
+          <td>${group.endX}</td>
+          <td>${group.endY}</td>
+          <td>${group.length}</td>
+          <td>${group.quantity}</td>
+          <td>${group.totalLength}</td>
+        `;
+        tr.onclick = async () => {
+          document.querySelectorAll('#rebarTable tr').forEach(r => r.classList.remove('selected'));
+          tr.classList.add('selected');
+          selectedGroup = group;
+          document.getElementById('labelSelected').disabled = false;
+
+          await tcApi.viewer.isolate({ modelId: group.modelId, objectIds: group.objectIds });
+          await tcApi.viewer.zoomTo({ modelId: group.modelId, objectIds: group.objectIds });
+        };
+        tbody.appendChild(tr);
+      });
     }
 
     async function processRebar() {
@@ -142,7 +200,7 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Processing...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10">Processing...</td></tr>';
 
       try {
         const selection = await tcApi.viewer.getSelection();
@@ -157,7 +215,6 @@
           const propsArray = await tcApi.viewer.getObjectProperties(modelId, runtimeIds);
 
           propsArray.forEach((props, i) => {
-            // Reliable detection: look for known rebar property sets
             const hasRebarPset = props.properties?.some(p => 
               p.name === 'Tekla Reinforcement - Bending List' || 
               p.name === 'ICOS Rebar'
@@ -180,14 +237,24 @@
 
           const mark = flat['Serial number'] || flat['Rebar mark'] || flat['Group position number'] || 'Unknown';
           const dia = flat['Size'] || '';
+          const shape = flat['Shape'] || flat['Shape code'] || '';
+          const startX = flat['Start Point X'] || '';
+          const startY = flat['Start Point Y'] || '';
+          const endX = flat['End Point X'] || '';
+          const endY = flat['End Point Y'] || '';
           const len = Math.round(Number(flat['Length'] || 0));
 
-          const key = `${mark}|${dia}|${len}|${item.modelId}`;
+          const key = `${mark}|${dia}|${len}|${shape}|${item.modelId}`;
 
           if (!groupMap[key]) {
             groupMap[key] = {
               mark,
               diameter: dia,
+              shape,
+              startX,
+              startY,
+              endX,
+              endY,
               length: len,
               objectIds: [],
               sampleProps: item.props,
@@ -203,38 +270,35 @@
           g.totalLength = (g.length * g.quantity).toFixed(0);
         });
 
-        tbody.innerHTML = '';
-        groups.forEach(group => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${group.mark}</td>
-            <td>${group.diameter}</td>
-            <td>${group.length}</td>
-            <td>${group.quantity}</td>
-            <td>${group.totalLength}</td>
-          `;
-          tr.onclick = async () => {
-            document.querySelectorAll('#rebarTable tr').forEach(r => r.classList.remove('selected'));
-            tr.classList.add('selected');
-            selectedGroup = group;
-            document.getElementById('labelSelected').disabled = false;
-
-            await tcApi.viewer.isolate({ modelId: group.modelId, objectIds: group.objectIds });
-            await tcApi.viewer.zoomTo({ modelId: group.modelId, objectIds: group.objectIds });
-          };
-          tbody.appendChild(tr);
-        });
+        renderTable();
 
         document.getElementById('labelAll').disabled = false;
         document.getElementById('clear').disabled = false;
         document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${allRebar.length} bars.`;
         document.getElementById('status').classList.add('good');
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="5">Error: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
         document.getElementById('status').classList.add('error');
       }
     }
+
+    // Sorting
+    document.querySelectorAll('th[data-sort]').forEach(th => {
+      th.onclick = () => {
+        const col = th.dataset.sort;
+        const currentDir = sortDirection[col] || 'asc';
+        const newDir = currentDir === 'asc' ? 'desc' : 'asc';
+        sortDirection = {}; // reset others
+        sortDirection[col] = newDir;
+
+        // Update arrows
+        document.querySelectorAll('th').forEach(h => h.className = '');
+        th.className = 'sorted-' + newDir;
+
+        sortTable(col, newDir);
+      };
+    });
 
     document.getElementById('refresh').onclick = processRebar;
     document.getElementById('clear').onclick = clearMarkups;
