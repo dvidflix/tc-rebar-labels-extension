@@ -12,9 +12,8 @@
   <div class="header">
     <div class="header-left">
       <div class="header-title">Rebar Labels</div>
-      <!-- Trimble Connect style Views selector -->
+      <!-- Clean Views selector without "Views" label -->
       <div class="views-selector-container">
-        <div class="views-label">Views</div>
         <button id="viewsDropdown" class="views-dropdown-button">
           <span id="viewsText">Selected objects</span>
           <img src="chevron-down.svg" class="dropdown-arrow" alt="▼">
@@ -117,7 +116,7 @@
       debugConsole.scrollTop = debugConsole.scrollHeight;
     }
 
-    // Views Dropdown - Trimble Connect style
+    // Views Dropdown
     const viewsDropdown = document.getElementById('viewsDropdown');
     const viewsMenu = document.getElementById('viewsMenu');
     const viewsText = document.getElementById('viewsText');
@@ -252,18 +251,20 @@
       if (selectedGroups.size > 0) await selectAndZoomGroup([...selectedGroups][0]);
     }
 
+    // Fixed sorting for all columns including endpoints
     function sortTable() {
       groups.sort((a, b) => {
         for (const {col, dir} of sortColumns) {
           let A = a[col] ?? '';
           let B = b[col] ?? '';
+
           if (col === 'shape') {
             if (A !== B) return A.localeCompare(B) * (dir === 'asc' ? 1 : -1);
           } else {
-            const numA = parseFloat(A);
-            const numB = parseFloat(B);
-            if (!isNaN(numA) && !isNaN(numB)) { A = numA; B = numB; }
-            if (A !== B) return (A < B ? -1 : 1) * (dir === 'asc' ? 1 : -1);
+            // Treat empty or '--' as -Infinity for numeric sort
+            const numA = (A === '' || A === '--') ? -Infinity : parseFloat(A);
+            const numB = (B === '' || B === '--') ? -Infinity : parseFloat(B);
+            if (numA !== numB) return (numA < numB ? -1 : 1) * (dir === 'asc' ? 1 : -1);
           }
         }
         return 0;
@@ -297,6 +298,7 @@
         const groupTr = document.createElement('tr');
         groupTr.className = 'group-row' + (isSelected ? ' selected' : '');
         groupTr.dataset.groupKey = group.key;
+        groupTr.dataset.groupIndex = groups.indexOf(group);
         groupTr.innerHTML = `
           <td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});">
             <img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon">
@@ -359,6 +361,9 @@
       updateLabelButtonState();
     }
 
+    // Fixed multi-selection with Ctrl + Shift
+    let lastClickedIndex = -1;
+
     function handleRowClick(e, group, rowElement) {
       if (e.target.classList.contains('expand-icon') || e.target.closest('.expand-icon')) {
         e.stopPropagation();
@@ -367,21 +372,37 @@
         return;
       }
 
+      const currentIndex = groups.indexOf(group);
       const isCtrl = e.ctrlKey || e.metaKey;
+      const isShift = e.shiftKey;
 
-      if (isCtrl) {
+      if (isShift && lastClickedIndex !== -1) {
+        const start = Math.min(lastClickedIndex, currentIndex);
+        const end = Math.max(lastClickedIndex, currentIndex);
+        selectedGroups.clear();
+        for (let i = start; i <= end; i++) {
+          selectedGroups.add(groups[i]);
+        }
+      } else if (isCtrl) {
         if (selectedGroups.has(group)) {
           selectedGroups.delete(group);
         } else {
           selectedGroups.add(group);
         }
+        lastClickedIndex = currentIndex;
       } else {
         selectedGroups.clear();
         selectedGroups.add(group);
+        lastClickedIndex = currentIndex;
       }
 
-      document.querySelectorAll(`tr[data-group-key="${group.key}"]`).forEach(tr => {
-        tr.classList.toggle('selected', selectedGroups.has(group));
+      // Update visual selection
+      document.querySelectorAll('tr').forEach(tr => {
+        const gKey = tr.dataset.groupKey;
+        if (gKey) {
+          const grp = groups.find(g => g.key === gKey);
+          if (grp) tr.classList.toggle('selected', selectedGroups.has(grp));
+        }
       });
 
       updateLabelButtonState();
@@ -489,7 +510,7 @@
       return props.properties?.some(p => p.name === 'Tekla Reinforcement - Bending List' || p.name === 'ICOS Rebar');
     }
 
-    // Advanced Sort Popup (same as before)
+    // Sort popup — fixed mouse clicks
     const sortPopup = document.getElementById('sortPopup');
     const sortLevels = document.getElementById('sortLevels');
     const addSortBtn = document.getElementById('addSort');
@@ -512,8 +533,10 @@
           <option value="desc" ${dir==='desc'?'selected':''}>Down</option>
         </select>
       `;
-      level.querySelector('.remove-sort').onclick = () => { level.remove(); updateSortColumns(); };
-      level.querySelectorAll('select').forEach(sel => sel.onchange = updateSortColumns);
+      level.querySelector('.remove-sort').onclick = (e) => { e.stopPropagation(); level.remove(); updateSortColumns(); };
+      level.querySelectorAll('select').forEach(sel => {
+        sel.onchange = (e) => { e.stopPropagation(); updateSortColumns(); };
+      });
       return level;
     }
 
@@ -529,7 +552,8 @@
       sortTable();
     }
 
-    addSortBtn.onclick = () => {
+    addSortBtn.onclick = (e) => {
+      e.stopPropagation();
       sortLevels.appendChild(createSortLevel(sortLevels.children.length));
       updateSortColumns();
     };
@@ -547,6 +571,8 @@
       sortPopup.style.right = (window.innerWidth - rect.right) + 'px';
       sortPopup.style.display = 'block';
     };
+
+    sortPopup.addEventListener('click', (e) => e.stopPropagation());
 
     document.addEventListener('click', () => { sortPopup.style.display = 'none'; });
 

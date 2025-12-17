@@ -26,36 +26,26 @@ body {
   margin-bottom: 8px;
 }
 
-/* Views Selector - Trimble Connect style */
+/* Views Selector - clean, no "Views" label */
 .views-selector-container {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 14px;
-  color: #555;
-}
-
-.views-label {
-  font-weight: 600;
-  color: #333;
+  margin-top: 4px;
 }
 
 .views-dropdown-button {
   background: none;
   border: none;
-  padding: 4px 24px 4px 8px;
+  padding: 4px 24px 4px 0;
   cursor: pointer;
   font-size: 14px;
   color: #333;
   display: flex;
   align-items: center;
   gap: 8px;
-  border-radius: 4px;
 }
 
 .views-dropdown-button:hover {
-  background: #f0f0f0;
+  text-decoration: underline;
 }
 
 .dropdown-arrow {
@@ -67,13 +57,13 @@ body {
 .views-dropdown-menu {
   display: none;
   position: absolute;
-  top: 32px;
-  left: 70px;
+  top: 28px;
+  left: 0;
   background: white;
   border: 1px solid #ddd;
   box-shadow: 0 6px 12px rgba(0,0,0,0.15);
   border-radius: 4px;
-  min-width: 200px;
+  min-width: 180px;
   z-index: 1000;
 }
 
@@ -92,10 +82,6 @@ body {
 
 .views-item:hover {
   background: #f0f0f0;
-}
-
-.views-item.selected {
-  font-weight: 600;
 }
 
 .checkmark {
