@@ -1,5 +1,5 @@
 body { 
-  font-family: Arial, sans-serif; 
+  font-family: 'Open Sans', Arial, sans-serif; 
   margin: 0; 
   padding: 0; 
   background: #f9f9f9; 
@@ -45,44 +45,51 @@ body {
   border-bottom: 1px solid #ddd;
 }
 
-/* Table */
+/* Table - Trimble Modus style */
 table {
   width: 100%;
   border-collapse: collapse;
   background: white;
   font-size: 14px;
+  line-height: 1.5;
 }
 
 th, td {
   border: 1px solid #ddd;
-  padding: 6px 8px;
+  padding: 8px 12px;
   text-align: left;
 }
 
 th {
-  background: #1a5fb4;
-  color: white;
+  background: #e0e1e9;
+  color: #252a2e;
+  font-weight: 600;
   cursor: pointer;
   user-select: none;
-  position: relative;
-  font-weight: normal;
+  text-transform: capitalize;
 }
 
-th:hover { background: #144a8a; }
+th:hover { background: #d0d1d9; }
 
-th.sorted-asc::after { content: " ▲"; font-size: 12px; }
-th.sorted-desc::after { content: " ▼"; font-size: 12px; }
+th.sorted-asc::after { content: " ▲"; color: #666; }
+th.sorted-desc::after { content: " ▼"; color: #666; }
 
-tr.group-row:hover { background: #f0f5ff; cursor: pointer; }
-tr.group-row.selected { background: #d0e4ff !important; }
-tr.child-row { background: #f8f8f8; }
-tr.child-row td:first-child, tr.child-row td:nth-child(2) { background: #fff; }
+tr.group-row { background: #f5f5f5; font-weight: 600; }
+tr.group-row:hover { background: #eaeaea; cursor: pointer; }
+tr.group-row.selected { background: #dcedf9 !important; }
+
+tr.child-row { background: #fafafa; }
+tr.child-row:hover { background: #f0f0f0; }
+tr.child-row.selected { background: #dcedf9 !important; }
 
 .expand-icon {
   cursor: pointer;
-  font-size: 12px;
+  font-size: 18px;
   margin-right: 8px;
+  color: #666;
 }
+
+.expand-icon:hover { color: #000; }
 
 .colorSwatch {
   width: 16px;
@@ -90,6 +97,11 @@ tr.child-row td:first-child, tr.child-row td:nth-child(2) { background: #fff; }
   display: inline-block;
   border: 1px solid #000;
   vertical-align: middle;
+}
+
+.empty-cell {
+  color: #999;
+  font-style: italic;
 }
 
 /* Footer info */

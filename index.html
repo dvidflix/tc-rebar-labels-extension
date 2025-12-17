@@ -5,141 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rebar Labels Extension</title>
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
-  <style>
-    body { 
-      font-family: Arial, sans-serif; 
-      margin: 0; 
-      padding: 0; 
-      background: #f9f9f9; 
-    }
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: #1a5fb4;
-      color: white;
-      padding: 12px 20px;
-      font-size: 18px;
-      font-weight: bold;
-    }
-    .header-actions button {
-      background: transparent;
-      border: none;
-      color: white;
-      cursor: pointer;
-      padding: 8px;
-      border-radius: 4px;
-    }
-    .header-actions button:hover {
-      background: rgba(255,255,255,0.2);
-    }
-    .header-actions button img {
-      height: 20px;
-      filter: brightness(0) invert(1);
-    }
-    .actions {
-      padding: 10px 20px;
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      background: #fff;
-      border-bottom: 1px solid #ddd;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: white;
-      font-size: 14px;
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 8px;
-      text-align: left;
-    }
-    th {
-      background: #e0e0e0;
-      color: #333;
-      cursor: pointer;
-      user-select: none;
-      position: relative;
-      font-weight: normal;
-    }
-    th:hover { background: #d0d0d0; }
-    th.sorted-asc::after { content: " ▲"; font-size: 12px; color: #666; }
-    th.sorted-desc::after { content: " ▼"; font-size: 12px; color: #666; }
-    tr.group-row { background: #f5f5f5; font-weight: bold; }
-    tr.group-row:hover { background: #eaeaea; cursor: pointer; }
-    tr.group-row.selected { background: #d0e4ff !important; }
-    tr.child-row { background: #fafafa; }
-    tr.child-row:hover { background: #f0f0f0; }
-    tr.child-row.selected { background: #d0e4ff !important; }
-    .expand-icon {
-      cursor: pointer;
-      font-size: 16px;
-      margin-right: 8px;
-      color: #666;
-    }
-    .expand-icon:hover { color: #000; }
-    .colorSwatch {
-      width: 16px;
-      height: 16px;
-      display: inline-block;
-      border: 1px solid #000;
-      vertical-align: middle;
-    }
-    .empty-cell {
-      color: #999;
-      font-style: italic;
-    }
-    .footer-info {
-      padding: 20px;
-      background: #fff;
-      border-top: 1px solid #ddd;
-    }
-    .status {
-      font-weight: bold;
-      color: #008000;
-      margin-bottom: 10px;
-    }
-    .instructions {
-      font-size: 14px;
-      color: #555;
-      margin-bottom: 10px;
-    }
-    .template-label {
-      display: block;
-    }
-    .debug-title {
-      padding: 20px 20px 0;
-      margin: 0;
-    }
-    #debugConsole {
-      margin: 20px;
-      background: #000;
-      color: #0f0;
-      padding: 10px;
-      font-family: monospace;
-      height: 200px;
-      overflow-y: auto;
-      border-radius: 4px;
-    }
-  </style>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="header">
     <div class="header-title">Rebar Labels Extension</div>
     <div class="header-actions">
       <button id="refresh" title="Refresh Rebar Data">
-        <img src="https://raw.githubusercontent.com/dvidflix/tc-rebar-labels-extension/main/refresh.png" alt="Refresh">
+        <img src="https://modus-icons.trimble.com/connect/autorenew/" alt="Refresh">
+      </button>
+      <button id="colorGroups" title="Color Groups (Random)">
+        <img src="https://modus-icons.trimble.com/connect/background/" alt="Color Groups">
       </button>
     </div>
   </div>
 
   <div class="actions">
-    <button id="colorGroups">Color Groups (Random)</button>
     <button id="clearColors">Clear Colors</button>
     <button id="selectGroups" disabled>Select & Zoom Selected Groups</button>
-    <button id="labelSelected" disabled>Label Selected Groups</button>
+    <button id="labelSelected" disabled>
+      <img src="https://modus-icons.trimble.com/connect/markup-text-active/" alt="Label">
+      Label Selected Groups
+    </button>
     <button id="labelAll" disabled>Label All Groups</button>
     <button id="clear" disabled>Clear Labels</button>
   </div>
@@ -148,7 +36,7 @@
     <thead>
       <tr>
         <th></th> <!-- Expand -->
-        <th></th> <!-- Color -->
+        <th></th> <!-- Color swatch -->
         <th data-sort="mark">Mark</th>
         <th data-sort="startX">Start X</th>
         <th data-sort="startY">Start Y</th>
@@ -376,7 +264,7 @@
         const groupTr = document.createElement('tr');
         groupTr.className = 'group-row';
         groupTr.innerHTML = `
-          <td><span class="expand-icon">${expandedGroups.has(group.key) ? '▼' : '▶'}</span></td>
+          <td><span class="expand-icon">${expandedGroups.has(group.key) ? '▼' : '>'}</span></td>
           <td>${swatch}</td>
           <td>${group.mark}</td>
           <td>${group.commonStartX || '<span class="empty-cell">--</span>'}</td>
@@ -429,6 +317,7 @@
             childTr.onclick = (e) => {
               e.stopPropagation();
               tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+              groupTr.classList.add('selected');
               childTr.classList.add('selected');
               selectedGroups = [group];
               document.getElementById('selectGroups').disabled = false;
@@ -525,7 +414,6 @@
         groups.forEach(g => {
           g.quantity = g.objectIds.length;
 
-          // Common values for group row
           const startsX = new Set(g.individualBars.map(b => b.startX));
           g.commonStartX = startsX.size === 1 ? g.individualBars[0].startX : '';
 
