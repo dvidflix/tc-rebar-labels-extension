@@ -30,10 +30,11 @@
   <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Instructions:</strong> Select one or more yellow rebar bars → click Refresh Rebar Data.</p>
+  <p><strong>Instructions:</strong> Load your rebar model in the 3D viewer → click Refresh Rebar Data (no selection needed).</p>
 
   <label><strong>Label Template</strong>:</label>
   <textarea id="template" rows="3">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
+  <p><small>Other useful: {Size}, {Length}, {Rebar mark}, {Shape code}, {End Point X}, {End Point Y}, {Grade}</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
   <button id="colorGroups">Color Groups (Random)</button>
@@ -82,14 +83,16 @@
     }
 
     async function init() {
-      debug('Initializing...');
+      debug('Initializing extension...');
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
         debug('Connected successfully');
-        document.getElementById('status').textContent = 'Connected! Select rebar bars and click Refresh.';
+        document.getElementById('status').textContent = 'Connected! Load model and click Refresh.';
         document.getElementById('status').classList.add('good');
       } catch (err) {
         debug('Connection error: ' + err.message);
+        document.getElementById('status').textContent = 'Connection failed: ' + err.message;
+        document.getElementById('status').classList.add('error');
       }
     }
 
@@ -149,6 +152,7 @@
     async function labelSelectedGroups() {
       if (selectedGroups.length === 0) return;
       await clearMarkups();
+      debug('Labeling selected groups');
       for (const group of selectedGroups) {
         await addLabel(group);
       }
@@ -156,6 +160,7 @@
 
     async function labelAllGroups() {
       await clearMarkups();
+      debug('Labeling all groups');
       for (const group of groups) {
         await addLabel(group);
       }
@@ -178,36 +183,54 @@
       return flat;
     }
 
+    function randomColor() {
+      return {
+        r: Math.floor(Math.random() * 256),
+        g: Math.floor(Math.random() * 256),
+        b: Math.floor(Math.random() * 256)
+      };
+    }
+
     async function colorGroups() {
-      debug('Coloring groups...');
+      debug('Applying random colors...');
       await tcApi.viewer.setObjectState([]);
       for (const group of groups) {
         const key = `${group.mark}|${group.diameter}|${group.length}|${group.shape}|${group.modelId}`;
-        if (!groupColors[key]) groupColors[key] = {
-          r: Math.floor(Math.random() * 256),
-          g: Math.floor(Math.random() * 256),
-          b: Math.floor(Math.random() * 256)
-        };
+        if (!groupColors[key]) groupColors[key] = randomColor();
         await tcApi.viewer.setObjectState({
           modelId: group.modelId,
           objectIds: group.objectIds,
           color: groupColors[key]
         });
       }
+      debug('Colors applied');
     }
 
     async function clearColors() {
+      debug('Clearing colors...');
       groupColors = {};
       await tcApi.viewer.setObjectState([]);
     }
 
     async function selectSelectedGroups() {
       if (selectedGroups.length === 0) return;
+      debug('Selecting groups in viewer...');
       let allIds = [];
       let modelId = selectedGroups[0].modelId;
       selectedGroups.forEach(g => allIds = allIds.concat(g.objectIds));
       await tcApi.viewer.isolate({ modelId, objectIds: allIds });
       await tcApi.viewer.zoomTo({ modelId, objectIds: allIds });
+    }
+
+    function sortTable(column, dir) {
+      groups.sort((a, b) => {
+        let A = a[column] ?? '';
+        let B = b[column] ?? '';
+        if (typeof A === 'string') A = A.toLowerCase();
+        if (typeof B === 'string') B = B.toLowerCase();
+        return (A < B ? -1 : A > B ? 1 : 0) * (dir === 'asc' ? 1 : -1);
+      });
+      renderTable();
     }
 
     function renderTable() {
@@ -262,48 +285,46 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="10">Processing...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10">Fetching all loaded objects...</td></tr>';
 
       try {
-        debug('Attempting to get selection with timeout...');
-        const selectionPromise = tcApi.viewer.getSelection();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('getSelection timed out after 10 seconds')), 10000)
-        );
+        debug('Calling tcApi.viewer.getObjects()...');
+        const allObjects = await tcApi.viewer.getObjects();
+        debug(`getObjects() returned ${allObjects.length} objects`);
 
-        const selection = await Promise.race([selectionPromise, timeoutPromise]);
-        debug(`Selection retrieved: ${selection.length} items`);
-
-        if (selection.length === 0) {
-          throw new Error('No objects selected in the 3D viewer. Please select rebar bars.');
+        if (allObjects.length === 0) {
+          throw new Error('No objects found in loaded model. Make sure your rebar model is loaded.');
         }
 
         let allRebar = [];
-        for (const sel of selection) {
-          const modelId = sel.modelId;
-          const runtimeIds = sel.objectRuntimeIds || [];
-          debug(`Processing: modelId=${modelId}, ${runtimeIds.length} IDs`);
+        for (const obj of allObjects) {
+          const modelId = obj.modelId;
+          const runtimeId = obj.objectRuntimeId || obj.id;
+          if (!modelId || !runtimeId) continue;
 
-          if (!modelId || runtimeIds.length === 0) continue;
-
-          const propsArray = await tcApi.viewer.getObjectProperties(modelId, runtimeIds);
-          debug(`Got ${propsArray.length} property sets`);
-
-          propsArray.forEach((props, i) => {
-            const hasRebar = props.properties?.some(p => p.name.includes('Reinforcement') || p.name.includes('Rebar'));
-            if (hasRebar) {
-              allRebar.push({
-                id: runtimeIds[i],
-                props: props,
-                modelId: modelId
-              });
+          try {
+            const propsArray = await tcApi.viewer.getObjectProperties(modelId, [runtimeId]);
+            const props = propsArray[0];
+            if (props && props.properties) {
+              const hasRebar = props.properties.some(p => 
+                p.name.includes('Reinforcement') || p.name.includes('Rebar')
+              );
+              if (hasRebar) {
+                allRebar.push({
+                  id: runtimeId,
+                  props: props,
+                  modelId: modelId
+                });
+              }
             }
-          });
+          } catch (e) {
+            // silent skip
+          }
         }
 
         debug(`Found ${allRebar.length} rebar elements`);
 
-        if (allRebar.length === 0) throw new Error('No rebar elements detected.');
+        if (allRebar.length === 0) throw new Error('No rebar elements found in model.');
 
         const groupMap = {};
         for (const item of allRebar) {
@@ -344,6 +365,7 @@
           g.totalLength = (g.length * g.quantity).toFixed(0);
         });
 
+        debug(`Created ${groups.length} groups`);
         renderTable();
         await colorGroups();
 
@@ -361,10 +383,28 @@
       debug('=== REFRESH ENDED ===');
     }
 
-    // Sorting and other functions remain the same
+    document.querySelectorAll('th[data-sort]').forEach(th => {
+      th.onclick = () => {
+        const col = th.dataset.sort;
+        const cur = sortDirection[col] || 'asc';
+        const newDir = cur === 'asc' ? 'desc' : 'asc';
+        sortDirection = {};
+        sortDirection[col] = newDir;
+
+        document.querySelectorAll('th').forEach(h => h.className = '');
+        th.className = 'sorted-' + newDir;
+
+        sortTable(col, newDir);
+      };
+    });
 
     document.getElementById('refresh').onclick = processRebar;
-    // other buttons
+    document.getElementById('colorGroups').onclick = colorGroups;
+    document.getElementById('clearColors').onclick = clearColors;
+    document.getElementById('selectGroups').onclick = selectSelectedGroups;
+    document.getElementById('labelSelected').onclick = labelSelectedGroups;
+    document.getElementById('labelAll').onclick = labelAllGroups;
+    document.getElementById('clear').onclick = clearMarkups;
 
     init();
   </script>
