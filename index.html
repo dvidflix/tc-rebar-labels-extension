@@ -40,8 +40,6 @@
   <button id="refresh">Refresh Rebar Data</button>
   <button id="colorGroups">Color Groups (Random)</button>
   <button id="clearColors">Clear Colors</button>
-  <button id="testColor">Test Color All (Red)</button>
-  <button id="selectGroups" disabled>Select & Zoom Selected Groups</button>
   <button id="labelSelected" disabled>Label Selected Groups</button>
   <button id="labelAll" disabled>Label All Groups</button>
   <button id="clear" disabled>Clear Labels</button>
@@ -120,7 +118,6 @@
       if (!text) text = 'Rebar';
 
       try {
-        // Fixed position label (safe)
         const textPos = { x: 0, y: 0, z: 5.0 };
         const anchor = { x: 0, y: 0, z: 0 };
 
@@ -219,37 +216,6 @@
       renderTable();
     }
 
-    async function testColorAllRed() {
-      debug('Testing coloring all rebar red...');
-      try {
-        await tcApi.viewer.setObjectState([]);
-      } catch (e) {
-        debug('Clear failed: ' + e.message);
-      }
-
-      let allIds = [];
-      let modelId = groups.length > 0 ? groups[0].modelId : null;
-      groups.forEach(g => allIds = allIds.concat(g.objectIds));
-
-      if (allIds.length === 0 || !modelId) {
-        debug('No objects to color');
-        return;
-      }
-
-      const red = { r: 255, g: 0, b: 0, a: 255 };
-
-      try {
-        await tcApi.viewer.setObjectState({
-          modelId: modelId,
-          objectIds: allIds,
-          color: red
-        });
-        debug('All rebar colored red');
-      } catch (e) {
-        debug('Test color error: ' + e.message);
-      }
-    }
-
     async function clearColors() {
       debug('Clearing colors...');
       groupColors = {};
@@ -262,9 +228,9 @@
       renderTable();
     }
 
-    async function selectSelectedGroups() {
+    async function selectAndZoomGroups() {
       if (selectedGroups.length === 0) return;
-      debug('Selecting groups with modelObjectIds array...');
+      debug('Selecting and zooming to selected groups...');
 
       const modelObjectIds = selectedGroups.map(g => ({
         modelId: g.modelId,
@@ -328,8 +294,10 @@
           }
 
           selectedGroups = groups.filter((_, i) => tbody.children[i].classList.contains('selected'));
-          document.getElementById('selectGroups').disabled = selectedGroups.length === 0;
           document.getElementById('labelSelected').disabled = selectedGroups.length === 0;
+
+          // Auto select & zoom on any row selection change
+          selectAndZoomGroups();
         };
         tbody.appendChild(tr);
       });
@@ -340,7 +308,6 @@
       await clearMarkups();
       groups = [];
       selectedGroups = [];
-      document.getElementById('selectGroups').disabled = true;
       document.getElementById('labelSelected').disabled = true;
       document.getElementById('labelAll').disabled = true;
       document.getElementById('clear').disabled = true;
@@ -459,8 +426,6 @@
     document.getElementById('refresh').onclick = processRebar;
     document.getElementById('colorGroups').onclick = colorGroups;
     document.getElementById('clearColors').onclick = clearColors;
-    document.getElementById('testColor').onclick = testColorAllRed;
-    document.getElementById('selectGroups').onclick = selectSelectedGroups;
     document.getElementById('labelSelected').onclick = labelSelectedGroups;
     document.getElementById('labelAll').onclick = labelAllGroups;
     document.getElementById('clear').onclick = clearMarkups;
