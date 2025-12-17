@@ -42,6 +42,9 @@
   <button id="clearColors">Clear Colors</button>
   <button id="testColor">Test Color All (Red)</button>
   <button id="selectGroups" disabled>Select & Zoom Selected Groups</button>
+  <button id="labelSelected" disabled>Label Selected Groups</button>
+  <button id="labelAll" disabled>Label All Groups</button>
+  <button id="clear" disabled>Clear Labels</button>
 
   <table id="rebarTable">
     <thead>
@@ -68,6 +71,7 @@
   <script>
     let tcApi;
     let groups = [];
+    let markupIds = [];
     let selectedGroups = [];
     let groupColors = {};
     let sortDirection = {};
@@ -95,6 +99,70 @@
       }
     }
 
+    async function clearMarkups() {
+      debug('Clearing markups...');
+      for (const id of markupIds) {
+        try {
+          await tcApi.viewer.markup.removeMarkup(id);
+        } catch (e) {}
+      }
+      markupIds = [];
+    }
+
+    async function addLabel(group) {
+      const flat = flattenProps(group.sampleProps);
+      let text = document.getElementById('template').value;
+
+      for (const [key, value] of Object.entries(flat)) {
+        text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
+      }
+      text = text.replace(/\{[^}]+\}/g, '').trim();
+      if (!text) text = 'Rebar';
+
+      try {
+        // Fixed position label (safe)
+        const textPos = { x: 0, y: 0, z: 5.0 };
+        const anchor = { x: 0, y: 0, z: 0 };
+
+        const textId = await tcApi.viewer.markup.addTextMarkup({
+          text: text,
+          position: textPos,
+          color: { r: 0, g: 0, b: 0 },
+          backgroundColor: { r: 255, g: 255, b: 255, a: 0.95 },
+          fontSize: 48,
+          padding: 12,
+          borderWidth: 2,
+          borderColor: { r: 0, g: 0, b: 0 }
+        });
+        markupIds.push(textId);
+
+        const arrowId = await tcApi.viewer.markup.addArrowMarkup({
+          start: textPos,
+          end: anchor,
+          color: { r: 0, g: 0, b: 0 },
+          width: 6
+        });
+        markupIds.push(arrowId);
+      } catch (e) {
+        debug('Label error: ' + e.message);
+      }
+    }
+
+    async function labelSelectedGroups() {
+      if (selectedGroups.length === 0) return;
+      await clearMarkups();
+      for (const group of selectedGroups) {
+        await addLabel(group);
+      }
+    }
+
+    async function labelAllGroups() {
+      await clearMarkups();
+      for (const group of groups) {
+        await addLabel(group);
+      }
+    }
+
     function flattenProps(props) {
       const flat = {};
       if (!props || !props.properties) return flat;
@@ -116,38 +184,39 @@
       return {
         r: Math.floor(Math.random() * 256),
         g: Math.floor(Math.random() * 256),
-        b: Math.floor(Math.random() * 256)
+        b: Math.floor(Math.random() * 256),
+        a: 255
       };
     }
 
     async function colorGroups() {
-      debug('Applying random colors to groups...');
+      debug('Applying random colors (ColorRGBA with a:255)...');
       try {
         await tcApi.viewer.setObjectState([]);
       } catch (e) {
-        debug('Failed to clear colors: ' + e.message);
+        debug('Clear colors failed: ' + e.message);
       }
 
       groupColors = {};
 
       for (const group of groups) {
         const key = `${group.mark}|${group.diameter}|${group.length}|${group.shape}|${group.modelId}`;
-        groupColors[key] = randomColor();
-        group.color = groupColors[key];
+        const color = randomColor();
+        groupColors[key] = color;
+        group.color = color;
 
         try {
           await tcApi.viewer.setObjectState({
             modelId: group.modelId,
             objectIds: group.objectIds,
-            color: groupColors[key]
+            color: color
           });
           debug(`Colored group ${group.mark}`);
         } catch (e) {
-          debug('Coloring error for group ' + group.mark + ': ' + e.message);
+          debug('Color error for group ' + group.mark + ': ' + e.message);
         }
       }
       renderTable();
-      debug('Random colors applied');
     }
 
     async function testColorAllRed() {
@@ -159,19 +228,21 @@
       }
 
       let allIds = [];
-      let modelId = groups[0]?.modelId || null;
+      let modelId = groups.length > 0 ? groups[0].modelId : null;
       groups.forEach(g => allIds = allIds.concat(g.objectIds));
 
-      if (allIds.length === 0) {
+      if (allIds.length === 0 || !modelId) {
         debug('No objects to color');
         return;
       }
+
+      const red = { r: 255, g: 0, b: 0, a: 255 };
 
       try {
         await tcApi.viewer.setObjectState({
           modelId: modelId,
           objectIds: allIds,
-          color: { r: 255, g: 0, b: 0 }
+          color: red
         });
         debug('All rebar colored red');
       } catch (e) {
@@ -193,14 +264,16 @@
 
     async function selectSelectedGroups() {
       if (selectedGroups.length === 0) return;
-      debug('Selecting and zooming to selected groups...');
-      let allIds = [];
-      let modelId = selectedGroups[0].modelId;
-      selectedGroups.forEach(g => allIds = allIds.concat(g.objectIds));
+      debug('Selecting groups with modelObjectIds array...');
+
+      const modelObjectIds = selectedGroups.map(g => ({
+        modelId: g.modelId,
+        objectRuntimeIds: g.objectIds
+      }));
 
       try {
-        await tcApi.viewer.setSelection({ modelId, objectIds: allIds });
-        await tcApi.viewer.zoomTo({ modelId, objectIds: allIds });
+        await tcApi.viewer.setSelection({ modelObjectIds }, "set");
+        await tcApi.viewer.zoomTo({ modelObjectIds });
         debug('Groups selected and zoomed');
       } catch (e) {
         debug('Select/zoom error: ' + e.message);
@@ -256,6 +329,7 @@
 
           selectedGroups = groups.filter((_, i) => tbody.children[i].classList.contains('selected'));
           document.getElementById('selectGroups').disabled = selectedGroups.length === 0;
+          document.getElementById('labelSelected').disabled = selectedGroups.length === 0;
         };
         tbody.appendChild(tr);
       });
@@ -263,9 +337,13 @@
 
     async function processRebar() {
       debug('=== REFRESH STARTED ===');
+      await clearMarkups();
       groups = [];
       selectedGroups = [];
       document.getElementById('selectGroups').disabled = true;
+      document.getElementById('labelSelected').disabled = true;
+      document.getElementById('labelAll').disabled = true;
+      document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
       tbody.innerHTML = '<tr><td colspan="11">Processing...</td></tr>';
@@ -290,7 +368,8 @@
 
           propsArray.forEach((props, i) => {
             const hasRebar = props.properties?.some(p => 
-              p.name.includes('Reinforcement') || p.name.includes('Rebar')
+              p.name === 'Tekla Reinforcement - Bending List' || 
+              p.name === 'ICOS Rebar'
             );
             if (hasRebar) {
               allRebar.push({
@@ -346,8 +425,10 @@
         });
 
         renderTable();
+        await colorGroups();
 
-        document.getElementById('selectGroups').disabled = false;
+        document.getElementById('labelAll').disabled = false;
+        document.getElementById('clear').disabled = false;
         document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${allRebar.length} bars.`;
         document.getElementById('status').classList.add('good');
         debug('Refresh completed');
@@ -380,6 +461,9 @@
     document.getElementById('clearColors').onclick = clearColors;
     document.getElementById('testColor').onclick = testColorAllRed;
     document.getElementById('selectGroups').onclick = selectSelectedGroups;
+    document.getElementById('labelSelected').onclick = labelSelectedGroups;
+    document.getElementById('labelAll').onclick = labelAllGroups;
+    document.getElementById('clear').onclick = clearMarkups;
 
     init();
   </script>
