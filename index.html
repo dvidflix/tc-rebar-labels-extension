@@ -17,17 +17,6 @@
     </div>
   </div>
 
-  <div class="status" id="status">Initializing...</div>
-
-  <div class="instructions">
-    Select one or more yellow rebar bars → click the refresh icon above.
-  </div>
-
-  <label class="template-label">
-    <strong>Label Template:</strong>
-    <textarea id="template" rows="2">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
-  </label>
-
   <div class="actions">
     <button id="colorGroups">Color Groups (Random)</button>
     <button id="clearColors">Clear Colors</button>
@@ -40,14 +29,15 @@
   <table id="rebarTable">
     <thead>
       <tr>
+        <th></th> <!-- Expand/Collapse -->
         <th></th> <!-- Color swatch -->
         <th data-sort="mark">Mark</th>
+        <th data-sort="diameter">Diam.</th>
+        <th data-sort="shape">Shape code</th>
         <th data-sort="startX">Start X</th>
         <th data-sort="startY">Start Y</th>
         <th data-sort="endX">End X</th>
         <th data-sort="endY">End Y</th>
-        <th data-sort="diameter">Diam.</th>
-        <th data-sort="shape">Shape code</th>
         <th data-sort="length">Length</th>
         <th data-sort="quantity">Count</th>
       </tr>
@@ -55,16 +45,27 @@
     <tbody></tbody>
   </table>
 
+  <div class="footer-info">
+    <div class="status" id="status"></div>
+    <div class="instructions">
+      Select one or more yellow rebar bars → click the refresh icon above.
+    </div>
+    <label class="template-label">
+      <strong>Label Template:</strong>
+      <textarea id="template" rows="2">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
+    </label>
+  </div>
+
   <h3 class="debug-title">Debug Console</h3>
   <pre id="debugConsole">Debug messages will appear here...</pre>
 
   <script>
     let tcApi;
     let groups = [];
-    let markupIds = [];
     let selectedGroups = [];
     let groupColors = {};
     let sortColumns = [{ col: 'startX', dir: 'asc' }, { col: 'startY', dir: 'asc' }];
+    let expandedGroups = new Set(); // track expanded group keys
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -80,17 +81,14 @@
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
         debug('Connected successfully');
-        document.getElementById('status').textContent = 'Connected! Select rebar bars and click the refresh icon.';
-        document.getElementById('status').classList.add('good');
+        document.getElementById('status').textContent = '';
+        document.getElementById('status').classList.remove('good', 'error');
       } catch (err) {
         debug('Connection error: ' + err.message);
-        document.getElementById('status').textContent = 'Connection failed: ' + err.message;
-        document.getElementById('status').classList.add('error');
       }
     }
 
     async function clearMarkups() {
-      debug('Clearing markups...');
       for (const id of markupIds) {
         try {
           await tcApi.viewer.markup.removeMarkup(id);
@@ -187,7 +185,7 @@
       groupColors = {};
 
       for (const group of groups) {
-        const key = `${group.mark}|${group.diameter}|${group.length}|${group.shape}|${group.modelId}`;
+        const key = group.key;
         const color = randomColor();
         groupColors[key] = color;
         group.color = color;
@@ -247,45 +245,71 @@
     function renderTable() {
       const tbody = document.querySelector('#rebarTable tbody');
       tbody.innerHTML = '';
+
       groups.forEach(group => {
         const color = group.color || { r: 255, g: 255, b: 255 };
         const swatch = `<div class="colorSwatch" style="background-color: rgb(${color.r},${color.g},${color.b});"></div>`;
 
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
+        // Group row
+        const groupTr = document.createElement('tr');
+        groupTr.className = 'group-row';
+        groupTr.innerHTML = `
+          <td><span class="expand-icon">▶</span></td>
           <td>${swatch}</td>
           <td>${group.mark}</td>
+          <td>${group.diameter}</td>
+          <td>${group.shape}</td>
           <td>${group.startX}</td>
           <td>${group.startY}</td>
           <td>${group.endX}</td>
           <td>${group.endY}</td>
-          <td>${group.diameter}</td>
-          <td>${group.shape}</td>
           <td>${group.length}</td>
           <td>${group.quantity}</td>
         `;
-        tr.onclick = (e) => {
-          if (e.ctrlKey || e.metaKey) {
-            tr.classList.toggle('selected');
-          } else if (e.shiftKey && selectedGroups.length > 0) {
-            const rows = Array.from(tbody.children);
-            const cur = rows.indexOf(tr);
-            const last = rows.findIndex(r => r.classList.contains('selected'));
-            const start = Math.min(cur, last);
-            const end = Math.max(cur, last);
-            rows.slice(start, end + 1).forEach(r => r.classList.add('selected'));
+        groupTr.onclick = (e) => {
+          if (e.target.classList.contains('expand-icon')) {
+            e.stopPropagation();
+            const isExpanded = expandedGroups.has(group.key);
+            if (isExpanded) {
+              expandedGroups.delete(group.key);
+              groupTr.querySelector('.expand-icon').textContent = '▶';
+            } else {
+              expandedGroups.add(group.key);
+              groupTr.querySelector('.expand-icon').textContent = '▼';
+            }
+            renderTable(); // re-render to show/hide child rows
           } else {
-            tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
-            tr.classList.add('selected');
+            tbody.querySelectorAll('tr.group-row').forEach(r => r.classList.remove('selected'));
+            groupTr.classList.add('selected');
+            selectedGroups = [group];
+            document.getElementById('selectGroups').disabled = false;
+            document.getElementById('labelSelected').disabled = false;
+            selectSelectedGroups();
           }
-
-          selectedGroups = groups.filter((_, i) => tbody.children[i].classList.contains('selected'));
-          document.getElementById('selectGroups').disabled = selectedGroups.length === 0;
-          document.getElementById('labelSelected').disabled = selectedGroups.length === 0;
-
-          selectSelectedGroups(); // auto select & zoom
         };
-        tbody.appendChild(tr);
+        tbody.appendChild(groupTr);
+
+        // Child rows (individual bars) if expanded
+        if (expandedGroups.has(group.key)) {
+          group.individualBars.forEach(bar => {
+            const barTr = document.createElement('tr');
+            barTr.className = 'child-row';
+            barTr.innerHTML = `
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td>${bar.startX}</td>
+              <td>${bar.startY}</td>
+              <td>${bar.endX}</td>
+              <td>${bar.endY}</td>
+              <td></td>
+              <td></td>
+            `;
+            tbody.appendChild(barTr);
+          });
+        }
       });
     }
 
@@ -294,13 +318,14 @@
       await clearMarkups();
       groups = [];
       selectedGroups = [];
+      expandedGroups = new Set();
       document.getElementById('selectGroups').disabled = true;
       document.getElementById('labelSelected').disabled = true;
       document.getElementById('labelAll').disabled = true;
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="10">Processing...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11">Processing...</td></tr>';
 
       try {
         debug('Fetching selection...');
@@ -333,6 +358,7 @@
 
         if (allRebar.length === 0) throw new Error('No rebar elements found.');
 
+        // Group by common properties, keep individual end points
         const groupMap = {};
         for (const item of allRebar) {
           const flat = flattenProps(item.props);
@@ -340,30 +366,37 @@
           const mark = flat['Serial number'] || flat['Rebar mark'] || flat['Group position number'] || 'Unknown';
           const dia = flat['Size'] || '';
           const shape = flat['Shape'] || flat['Shape code'] || '';
-          const startX = flat['Start Point X'] || '';
-          const startY = flat['Start Point Y'] || '';
-          const endX = flat['End Point X'] || '';
-          const endY = flat['End Point Y'] || '';
-          const len = Math.round(Number(flat['Length'] || 0));
+          const length = Math.round(Number(flat['Length'] || 0));
 
-          const key = `${mark}|${dia}|${len}|${shape}|${item.modelId}`;
+          const key = `${mark}|${dia}|${length}|${shape}|${item.modelId}`;
 
           if (!groupMap[key]) {
             groupMap[key] = {
+              key,
               mark,
               diameter: dia,
               shape,
-              startX,
-              startY,
-              endX,
-              endY,
-              length: len,
+              length,
+              startX: flat['Start Point X'] || '',
+              startY: flat['Start Point Y'] || '',
+              endX: flat['End Point X'] || '',
+              endY: flat['End Point Y'] || '',
               objectIds: [],
               sampleProps: item.props,
-              modelId: item.modelId
+              modelId: item.modelId,
+              individualBars: []
             };
           }
+
           groupMap[key].objectIds.push(item.id);
+
+          // Store individual bar end points
+          groupMap[key].individualBars.push({
+            startX: flat['Start Point X'] || '',
+            startY: flat['Start Point Y'] || '',
+            endX: flat['End Point X'] || '',
+            endY: flat['End Point Y'] || ''
+          });
         }
 
         groups = Object.values(groupMap);
@@ -383,7 +416,7 @@
         debug('Refresh completed');
       } catch (err) {
         debug('ERROR: ' + err.message);
-        tbody.innerHTML = `<tr><td colspan="10">Error: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
         document.getElementById('status').classList.add('error');
       }
@@ -393,7 +426,6 @@
     document.querySelectorAll('th[data-sort]').forEach(th => {
       th.onclick = () => {
         const col = th.dataset.sort;
-
         const existing = sortColumns.findIndex(s => s.col === col);
         let newDir = 'asc';
 
