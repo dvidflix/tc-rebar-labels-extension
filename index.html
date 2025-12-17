@@ -119,13 +119,9 @@
       if (!text) text = 'Rebar';
 
       try {
-        const bounds = await tcApi.viewer.getObjectBounds(group.objectIds);
-        const anchor = {
-          x: (bounds.min.x + bounds.max.x) / 2,
-          y: (bounds.min.y + bounds.max.y) / 2,
-          z: (bounds.min.z + bounds.max.z) / 2
-        };
-        const textPos = { x: anchor.x + 2.0, y: anchor.y + 2.0, z: anchor.z + 5.0 };
+        // Fixed position label (avoid getObjectBounds)
+        const textPos = { x: 0, y: 0, z: 5.0 };
+        const anchor = { x: 0, y: 0, z: 0 };
 
         const textId = await tcApi.viewer.markup.addTextMarkup({
           text: text,
@@ -146,7 +142,7 @@
           width: 6
         });
         markupIds.push(arrowId);
-        debug('Label added successfully');
+        debug('Label added (fixed position)');
       } catch (e) {
         debug('Label error: ' + e.message);
       }
@@ -195,14 +191,14 @@
     }
 
     async function colorGroups() {
-      debug('Applying random colors to groups...');
+      debug('Applying random colors...');
       await tcApi.viewer.setObjectState([]);
       groupColors = {};
 
       for (const group of groups) {
         const key = `${group.mark}|${group.diameter}|${group.length}|${group.shape}|${group.modelId}`;
         groupColors[key] = randomColor();
-        group.color = groupColors[key]; // store for table
+        group.color = groupColors[key];
 
         await tcApi.viewer.setObjectState({
           modelId: group.modelId,
@@ -210,8 +206,8 @@
           color: groupColors[key]
         });
       }
-      renderTable(); // update table with color swatches
-      debug('Random colors applied');
+      renderTable();
+      debug('Colors applied');
     }
 
     async function clearColors() {
@@ -290,6 +286,7 @@
     async function processRebar() {
       debug('=== REFRESH STARTED ===');
       await clearMarkups();
+      await clearColors();
       groups = [];
       selectedGroups = [];
       document.getElementById('selectGroups').disabled = true;
