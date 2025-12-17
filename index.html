@@ -34,6 +34,7 @@
 
   <label><strong>Label Template</strong>:</label>
   <textarea id="template" rows="3">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
+  <p><small>Other useful: {Size}, {Length}, {Rebar mark}, {Shape code}, {End Point X}, {End Point Y}, {Grade}</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
   <button id="colorGroups">Color Groups (Random)</button>
@@ -90,6 +91,8 @@
         document.getElementById('status').classList.add('good');
       } catch (err) {
         debug('Connection error: ' + err.message);
+        document.getElementById('status').textContent = 'Connection failed: ' + err.message;
+        document.getElementById('status').classList.add('error');
       }
     }
 
@@ -149,6 +152,7 @@
     async function labelSelectedGroups() {
       if (selectedGroups.length === 0) return;
       await clearMarkups();
+      debug('Labeling selected groups');
       for (const group of selectedGroups) {
         await addLabel(group);
       }
@@ -156,6 +160,7 @@
 
     async function labelAllGroups() {
       await clearMarkups();
+      debug('Labeling all groups');
       for (const group of groups) {
         await addLabel(group);
       }
@@ -178,6 +183,14 @@
       return flat;
     }
 
+    function randomColor() {
+      return {
+        r: Math.floor(Math.random() * 256),
+        g: Math.floor(Math.random() * 256),
+        b: Math.floor(Math.random() * 256)
+      };
+    }
+
     async function colorGroups() {
       debug('Applying random colors...');
       await tcApi.viewer.setObjectState([]);
@@ -190,15 +203,18 @@
           color: groupColors[key]
         });
       }
+      debug('Colors applied');
     }
 
     async function clearColors() {
+      debug('Clearing colors...');
       groupColors = {};
       await tcApi.viewer.setObjectState([]);
     }
 
     async function selectSelectedGroups() {
       if (selectedGroups.length === 0) return;
+      debug('Selecting groups in viewer...');
       let allIds = [];
       let modelId = selectedGroups[0].modelId;
       selectedGroups.forEach(g => allIds = allIds.concat(g.objectIds));
@@ -206,12 +222,15 @@
       await tcApi.viewer.zoomTo({ modelId, objectIds: allIds });
     }
 
-    function randomColor() {
-      return {
-        r: Math.floor(Math.random() * 256),
-        g: Math.floor(Math.random() * 256),
-        b: Math.floor(Math.random() * 256)
-      };
+    function sortTable(column, dir) {
+      groups.sort((a, b) => {
+        let A = a[column] ?? '';
+        let B = b[column] ?? '';
+        if (typeof A === 'string') A = A.toLowerCase();
+        if (typeof B === 'string') B = B.toLowerCase();
+        return (A < B ? -1 : A > B ? 1 : 0) * (dir === 'asc' ? 1 : -1);
+      });
+      renderTable();
     }
 
     function renderTable() {
@@ -274,7 +293,7 @@
           debug('Using getLoadedModels()');
           models = await tcApi.viewer.getLoadedModels();
         } else {
-          debug('getLoadedModels not available, falling back to getModels()');
+          debug('Using getModels() as fallback');
           models = await tcApi.viewer.getModels();
         }
 
@@ -287,36 +306,32 @@
         let allRebar = [];
         for (const model of models) {
           const modelId = model.id || model.modelId;
-          debug(`Fetching objects for modelId: ${modelId}`);
-          try {
-            const objects = await tcApi.viewer.getObjects(modelId);
-            debug(`Got ${objects.length} objects for model ${modelId}`);
+          debug(`Fetching objects for model ${modelId}`);
+          const objects = await tcApi.viewer.getObjects(modelId);
+          debug(`Got ${objects.length} objects`);
 
-            for (const obj of objects) {
-              const runtimeId = obj.objectRuntimeId || obj.id || obj.objectId;
-              if (!runtimeId) continue;
+          for (const obj of objects) {
+            const runtimeId = obj.objectRuntimeId || obj.id;
+            if (!runtimeId) continue;
 
-              try {
-                const propsArray = await tcApi.viewer.getObjectProperties(modelId, [runtimeId]);
-                const props = propsArray[0];
-                if (props && props.properties) {
-                  const hasRebar = props.properties.some(p => 
-                    p.name.includes('Reinforcement') || p.name.includes('Rebar') || p.name.includes('Tekla') || p.name.includes('ICOS')
-                  );
-                  if (hasRebar) {
-                    allRebar.push({
-                      id: runtimeId,
-                      props: props,
-                      modelId: modelId
-                    });
-                  }
+            try {
+              const propsArray = await tcApi.viewer.getObjectProperties(modelId, [runtimeId]);
+              const props = propsArray[0];
+              if (props && props.properties) {
+                const hasRebar = props.properties.some(p => 
+                  p.name.includes('Reinforcement') || p.name.includes('Rebar') || p.name.includes('Tekla') || p.name.includes('ICOS')
+                );
+                if (hasRebar) {
+                  allRebar.push({
+                    id: runtimeId,
+                    props: props,
+                    modelId: modelId
+                  });
                 }
-              } catch (propErr) {
-                debug('Property fetch error for object: ' + propErr.message);
               }
+            } catch (e) {
+              // silent skip
             }
-          } catch (objErr) {
-            debug('getObjects error for model ' + modelId + ': ' + objErr.message);
           }
         }
 
@@ -371,6 +386,7 @@
         document.getElementById('clear').disabled = false;
         document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${allRebar.length} bars.`;
         document.getElementById('status').classList.add('good');
+        debug('Refresh completed');
       } catch (err) {
         debug('ERROR: ' + err.message);
         tbody.innerHTML = `<tr><td colspan="10">Error: ${err.message}</td></tr>`;
