@@ -24,23 +24,28 @@
     .good { color: #008000; }
     .error { color: #d00000; }
     #debugConsole { background: #000; color: #0f0; padding: 10px; font-family: monospace; height: 250px; overflow-y: auto; margin-top: 20px; border-radius: 4px; }
+    .colorSwatch { width: 20px; height: 20px; display: inline-block; border: 1px solid #000; vertical-align: middle; }
   </style>
 </head>
 <body>
   <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Instructions:</strong> Select rebar bars → Refresh → multi-select rows → Select & Zoom → use native markup for labels (copy template).</p>
+  <p><strong>Instructions:</strong> Select one or more yellow rebar bars → click Refresh Rebar Data.</p>
 
-  <label><strong>Label Template</strong> (copy for native markup):</label>
+  <label><strong>Label Template</strong> (copy for manual labeling):</label>
   <textarea id="template" rows="3">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
+  <p><small>Other useful: {Size}, {Length}, {Rebar mark}, {Shape code}, {End Point X}, {End Point Y}, {Grade}</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
+  <button id="colorGroups">Color Groups (Random)</button>
+  <button id="clearColors">Clear Colors</button>
   <button id="selectGroups" disabled>Select & Zoom Selected Groups</button>
 
   <table id="rebarTable">
     <thead>
       <tr>
+        <th></th> <!-- Color swatch -->
         <th data-sort="mark">Mark/Serial</th>
         <th data-sort="diameter">Diameter/Size</th>
         <th data-sort="shape">Shape code</th>
@@ -63,6 +68,7 @@
     let tcApi;
     let groups = [];
     let selectedGroups = [];
+    let groupColors = {}; // key → hex string
     let sortDirection = {};
 
     const debugConsole = document.getElementById('debugConsole');
@@ -75,7 +81,7 @@
     }
 
     async function init() {
-      debug('Initializing...');
+      debug('Initializing extension...');
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
         debug('Connected successfully');
@@ -83,6 +89,8 @@
         document.getElementById('status').classList.add('good');
       } catch (err) {
         debug('Connection error: ' + err.message);
+        document.getElementById('status').textContent = 'Connection failed: ' + err.message;
+        document.getElementById('status').classList.add('error');
       }
     }
 
@@ -103,6 +111,69 @@
       return flat;
     }
 
+    function randomHexColor() {
+      return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+    }
+
+    async function colorGroups() {
+      debug('Applying random colors to groups...');
+      try {
+        await tcApi.viewer.setObjectState([]); // clear all
+      } catch (e) {
+        debug('Clear colors failed: ' + e.message);
+      }
+
+      groupColors = {};
+
+      for (const group of groups) {
+        const key = `${group.mark}|${group.diameter}|${group.length}|${group.shape}|${group.modelId}`;
+        const hex = randomHexColor();
+        groupColors[key] = hex;
+        group.colorHex = hex;
+
+        try {
+          await tcApi.viewer.setObjectState({
+            modelId: group.modelId,
+            objectIds: group.objectIds,
+            color: hex
+          });
+          debug(`Colored group ${group.mark} with ${hex}`);
+        } catch (e) {
+          debug(`Coloring failed for group ${group.mark}: ${e.message}`);
+        }
+      }
+      renderTable();
+      debug('Coloring complete');
+    }
+
+    async function clearColors() {
+      debug('Clearing colors...');
+      groupColors = {};
+      groups.forEach(g => g.colorHex = null);
+      try {
+        await tcApi.viewer.setObjectState([]);
+      } catch (e) {
+        debug('Clear colors failed: ' + e.message);
+      }
+      renderTable();
+    }
+
+    async function selectSelectedGroups() {
+      if (selectedGroups.length === 0) return;
+      debug('Selecting and zooming to selected groups...');
+      let allIds = [];
+      let modelId = selectedGroups[0].modelId;
+      selectedGroups.forEach(g => allIds = allIds.concat(g.objectIds));
+
+      try {
+        await tcApi.viewer.setSelection({ modelId, objectIds: allIds });
+        await tcApi.viewer.zoomTo({ modelId, objectIds: allIds });
+        debug('Groups selected and zoomed');
+      } catch (e) {
+        debug('Select/zoom error: ' + e.message);
+      }
+    }
+
     function sortTable(column, dir) {
       groups.sort((a, b) => {
         let A = a[column] ?? '';
@@ -118,8 +189,11 @@
       const tbody = document.querySelector('#rebarTable tbody');
       tbody.innerHTML = '';
       groups.forEach(group => {
+        const swatch = `<div class="colorSwatch" style="background-color: ${group.colorHex || '#FFFFFF'};"></div>`;
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
+          <td>${swatch}</td>
           <td>${group.mark}</td>
           <td>${group.diameter}</td>
           <td>${group.shape}</td>
@@ -153,21 +227,6 @@
       });
     }
 
-    async function selectSelectedGroups() {
-      if (selectedGroups.length === 0) return;
-      debug('Selecting and zooming to groups...');
-      let allIds = [];
-      let modelId = selectedGroups[0].modelId;
-      selectedGroups.forEach(g => allIds = allIds.concat(g.objectIds));
-      try {
-        await tcApi.viewer.setSelection({ modelId, objectIds: allIds });
-        await tcApi.viewer.zoomTo({ modelId, objectIds: allIds });
-        debug('Selected and zoomed');
-      } catch (e) {
-        debug('Select/zoom error: ' + e.message);
-      }
-    }
-
     async function processRebar() {
       debug('=== REFRESH STARTED ===');
       groups = [];
@@ -175,7 +234,7 @@
       document.getElementById('selectGroups').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="10">Processing...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11">Processing...</td></tr>';
 
       try {
         debug('Fetching selection...');
@@ -253,6 +312,7 @@
         });
 
         renderTable();
+        await colorGroups();
 
         document.getElementById('selectGroups').disabled = false;
         document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${allRebar.length} bars.`;
@@ -260,7 +320,7 @@
         debug('Refresh completed');
       } catch (err) {
         debug('ERROR: ' + err.message);
-        tbody.innerHTML = `<tr><td colspan="10">Error: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
         document.getElementById('status').classList.add('error');
       }
@@ -283,6 +343,8 @@
     });
 
     document.getElementById('refresh').onclick = processRebar;
+    document.getElementById('colorGroups').onclick = colorGroups;
+    document.getElementById('clearColors').onclick = clearColors;
     document.getElementById('selectGroups').onclick = selectSelectedGroups;
 
     init();
