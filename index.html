@@ -18,33 +18,37 @@
       <button id="refresh" title="Refresh Rebar Data">
         <img src="update.svg" alt="Refresh">
       </button>
-      <button id="colorGroups" class="toggle-button" title="Color Groups (Random)">
-        <img src="background.svg" alt="Color Groups">
-      </button>
-      <button id="sortButton" title="Sort">
-        <img src="sort.svg" alt="Sort">
-      </button>
-      <button id="labelSelected" disabled title="Label Selected Group">
-        <img src="tag.svg" alt="Label Selected">
-      </button>
-      <button id="labelAll" disabled title="Label All Groups">
-        <img src="tag_solid.svg" alt="Label All">
-      </button>
-      <button id="clear" disabled title="Clear Labels">
-        <img src="tag_solid-disabled.svg" alt="Clear Labels">
-      </button>
-      <button id="zoomCenter" title="Zoom to Selected">
-        <img src="zoom-center.svg" alt="Zoom Center">
+      <button id="moreOptions" title="More Options">
+        <img src="more-vertical.svg" alt="More">
       </button>
     </div>
   </div>
 
-  <!-- Sort Popup -->
-  <div id="sortPopup" class="sort-popup">
-    <div class="sort-popup-content">
-      <h4>Sort by</h4>
-      <ul id="sortOptions"></ul>
+  <!-- More Options Popup -->
+  <div id="morePopup" class="more-popup">
+    <div class="more-popup-content">
+      <button id="colorRandom" class="toggle-button">Color Groups (Random)</button>
+      <button id="colorPalette">Color Groups (Default Palette)</button>
+      <button id="clearColorsBtn">Clear Colors</button>
     </div>
+  </div>
+
+  <div class="actions">
+    <button id="labelSelected" disabled>
+      <img src="tag.svg" alt="Label">
+      Label Selected Groups
+    </button>
+    <button id="labelAll" disabled>
+      <img src="tag_solid.svg" alt="Label All">
+      Label All Groups
+    </button>
+    <button id="clear" disabled>
+      <img src="tag_solid-disabled.svg" alt="Clear Labels">
+      Clear Labels
+    </button>
+    <button id="zoomCenter" title="Zoom to Selected">
+      <img src="zoom-center.svg" alt="Zoom Center">
+    </button>
   </div>
 
   <table id="rebarTable">
@@ -87,7 +91,7 @@
     let groupColors = {};
     let sortColumns = [];
     let expandedGroups = new Set();
-    let coloringActive = false;
+    let randomColoringActive = false;
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -185,28 +189,61 @@
       return flat;
     }
 
-    function randomColor() {
-      return {
-        r: Math.floor(Math.random() * 256),
-        g: Math.floor(Math.random() * 256),
-        b: Math.floor(Math.random() * 256),
-        a: 255
-      };
-    }
+    // Trimble Default Color Palette (50 colors from your image)
+    const defaultPalette = [
+      { r: 0, g: 0, b: 139 },     // 1 dark blue
+      { r: 173, g: 216, b: 230 }, // 2 light blue
+      { r: 255, g: 0, b: 0 },     // 3 red
+      { r: 0, g: 255, b: 255 },   // 4 cyan
+      { r: 0, g: 100, b: 0 },     // 5 dark green
+      { r: 255, g: 255, b: 224 }, // 6 light yellow
+      { r: 128, g: 0, b: 128 },   // 7 purple
+      { r: 0, g: 0, b: 255 },     // 8 blue
+      { r: 255, g: 255, b: 0 },   // 9 yellow
+      { r: 0, g: 128, b: 0 },     // 10 green
+      { r: 255, g: 228, b: 196 }, // 11 bisque
+      { r: 255, g: 165, b: 0 },   // 12 orange
+      { r: 0, g: 128, b: 128 },   // 13 teal
+      { r: 139, g: 0, b: 0 },     // 14 dark red
+      { r: 165, g: 42, b: 42 },   // 15 brown
+      { r: 128, g: 128, b: 128 }, // 16 gray
+      { r: 255, g: 192, b: 203 }, // 17 pink
+      { r: 0, g: 255, b: 0 },     // 18 lime
+      { r: 255, g: 105, b: 180 }, // 19 hot pink
+      { r: 255, g: 140, b: 0 },   // 20 dark orange
+      { r: 220, g: 20, b: 60 },   // 21 crimson
+      { r: 255, g: 99, b: 71 },   // 22 tomato
+      { r: 218, g: 112, b: 214 }, // 23 orchid
+      { r: 30, g: 144, b: 255 },  // 24 dodger blue
+      { r: 50, g: 205, b: 50 },   // 25 lime green
+      { r: 186, g: 85, b: 211 },  // 26 medium orchid
+      { r: 173, g: 255, b: 47 },  // 27 green yellow
+      { r: 60, g: 179, b: 113 },  // 28 medium sea green
+      { r: 255, g: 20, b: 147 },  // 29 deep pink
+      { r: 255, g: 215, b: 0 },   // 30 gold
+      { r: 255, g: 182, b: 193 }, // 31 light pink
+      { r: 139, g: 69, b: 19 },   // 32 saddle brown
+      { r: 0, g: 255, b: 127 },   // 33 spring green
+      { r: 255, g: 160, b: 122 }, // 34 light salmon
+      { r: 255, g: 0, b: 255 },   // 35 magenta
+      { r: 240, g: 230, b: 140 }, // 36 khaki
+      { r: 128, g: 0, b: 0 },     // 37 maroon
+      { r: 0, g: 206, b: 209 },   // 38 dark turquoise
+      { r: 255, g: 228, b: 181 }, // 39 moccasin
+      { r: 199, g: 21, b: 133 },  // 40 medium violet red
+      { r: 255, g: 69, b: 0 },    // 41 orange red
+      { r: 144, g: 238, b: 144 }, // 42 light green
+      { r: 72, g: 209, b: 204 },  // 43 medium turquoise
+      { r: 210, g: 180, b: 140 }, // 44 tan
+      { r: 205, g: 133, b: 63 },  // 45 peru
+      { r: 152, g: 251, b: 152 }, // 46 pale green
+      { r: 250, g: 240, b: 230 }, // 47 linen
+      { r: 160, g: 82, b: 45 },   // 48 sienna
+      { r: 255, g: 245, b: 238 }, // 49 seashell
+      { r: 139, g: 0, b: 139 },   // 50 dark magenta
+    ];
 
-    async function toggleColorGroups() {
-      coloringActive = !coloringActive;
-      const button = document.getElementById('colorGroups');
-      button.classList.toggle('active', coloringActive);
-
-      if (coloringActive) {
-        await colorGroups();
-      } else {
-        await clearColors();
-      }
-    }
-
-    async function colorGroups() {
+    async function colorGroupsRandom() {
       debug('Applying random colors...');
       try {
         await tcApi.viewer.setObjectState([]);
@@ -216,9 +253,41 @@
 
       for (const group of groups) {
         const key = group.key;
-        const color = randomColor();
+        const color = {
+          r: Math.floor(Math.random() * 256),
+          g: Math.floor(Math.random() * 256),
+          b: Math.floor(Math.random() * 256),
+          a: 255
+        };
         groupColors[key] = color;
         group.color = color;
+
+        try {
+          await tcApi.viewer.setObjectState({
+            modelId: group.modelId,
+            objectIds: group.objectIds,
+            color: color
+          });
+        } catch (e) {}
+      }
+      renderTable();
+    }
+
+    async function colorGroupsPalette() {
+      debug('Applying default palette colors...');
+      try {
+        await tcApi.viewer.setObjectState([]);
+      } catch (e) {}
+
+      groupColors = {};
+
+      let paletteIndex = 0;
+      for (const group of groups) {
+        const key = group.key;
+        const color = defaultPalette[paletteIndex % defaultPalette.length];
+        groupColors[key] = color;
+        group.color = color;
+        paletteIndex++;
 
         try {
           await tcApi.viewer.setObjectState({
@@ -264,7 +333,6 @@
         for (const {col, dir} of sortColumns) {
           let A = a[col] ?? '';
           let B = b[col] ?? '';
-          // Convert to number if possible (for X/Y coordinates)
           const numA = parseFloat(A);
           const numB = parseFloat(B);
           if (!isNaN(numA) && !isNaN(numB)) {
@@ -467,55 +535,35 @@
       debug('=== REFRESH ENDED ===');
     }
 
-    // Sort popup
-    const sortPopup = document.getElementById('sortPopup');
-    const sortOptions = document.getElementById('sortOptions');
+    // More Options popup
+    const morePopup = document.getElementById('morePopup');
 
-    document.getElementById('sortButton').onclick = (e) => {
+    document.getElementById('moreOptions').onclick = (e) => {
       e.stopPropagation();
-      sortOptions.innerHTML = '';
-      const columns = ['mark', 'startX', 'startY', 'endX', 'endY', 'diameter', 'shape', 'length', 'quantity'];
-
-      columns.forEach(col => {
-        const li = document.createElement('li');
-        li.textContent = document.querySelector(`th[data-sort="${col}"]`).textContent.trim();
-
-        const existing = sortColumns.find(s => s.col === col);
-        if (existing) {
-          li.textContent += existing.dir === 'asc' ? ' ▲' : ' ▼';
-        }
-
-        li.onclick = (e) => {
-          e.stopPropagation();
-          const existingIndex = sortColumns.findIndex(s => s.col === col);
-          if (existingIndex !== -1) {
-            const currentDir = sortColumns[existingIndex].dir;
-            if (currentDir === 'asc') {
-              sortColumns[existingIndex].dir = 'desc';
-            } else {
-              sortColumns.splice(existingIndex, 1);
-            }
-          } else {
-            sortColumns.unshift({ col, dir: 'asc' });
-          }
-          sortTable();
-          sortPopup.style.display = 'none';
-        };
-        sortOptions.appendChild(li);
-      });
-
-      const rect = document.getElementById('sortButton').getBoundingClientRect();
-      sortPopup.style.top = rect.bottom + 'px';
-      sortPopup.style.right = (window.innerWidth - rect.right) + 'px';
-      sortPopup.style.display = 'block';
+      morePopup.style.display = morePopup.style.display === 'block' ? 'none' : 'block';
     };
 
     document.addEventListener('click', () => {
-      sortPopup.style.display = 'none';
+      morePopup.style.display = 'none';
     });
 
+    document.getElementById('colorRandom').onclick = () => {
+      randomColoringActive = !randomColoringActive;
+      document.getElementById('colorRandom').classList.toggle('active', randomColoringActive);
+      if (randomColoringActive) {
+        colorGroupsRandom();
+      } else {
+        clearColors();
+      }
+    };
+
+    document.getElementById('colorPalette').onclick = () => {
+      colorGroupsPalette();
+    };
+
+    document.getElementById('clearColorsBtn').onclick = clearColors;
+
     document.getElementById('refresh').onclick = processRebar;
-    document.getElementById('colorGroups').onclick = toggleColorGroups;
     document.getElementById('labelSelected').onclick = labelSelectedGroups;
     document.getElementById('labelAll').onclick = labelAllGroups;
     document.getElementById('clear').onclick = clearMarkups;
