@@ -23,45 +23,90 @@ body {
 .header-title {
   font-size: 18px;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
-.views-selector {
-  font-size: 14px;
-  color: #333;
-  cursor: pointer;
+/* Views Selector - Trimble Connect style */
+.views-selector-container {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
+  font-size: 14px;
+  color: #555;
 }
 
-.views-arrow {
-  font-size: 12px;
-  color: #666;
+.views-label {
+  font-weight: 600;
+  color: #333;
 }
 
-.views-menu {
+.views-dropdown-button {
+  background: none;
+  border: none;
+  padding: 4px 24px 4px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 4px;
+}
+
+.views-dropdown-button:hover {
+  background: #f0f0f0;
+}
+
+.dropdown-arrow {
+  width: 12px;
+  height: 12px;
+  opacity: 0.6;
+}
+
+.views-dropdown-menu {
   display: none;
   position: absolute;
-  top: 100%;
-  left: 0;
+  top: 32px;
+  left: 70px;
   background: white;
-  border: 1px solid #ccc;
+  border: 1px solid #ddd;
   box-shadow: 0 6px 12px rgba(0,0,0,0.15);
   border-radius: 4px;
+  min-width: 200px;
   z-index: 1000;
-  margin-top: 4px;
-  min-width: 180px;
 }
 
-.views-menu.show { display: block; }
+.views-dropdown-menu.show {
+  display: block;
+}
 
 .views-item {
   padding: 8px 12px;
   font-size: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
 }
 
-.views-item:hover { background: #f0f0f0; }
+.views-item:hover {
+  background: #f0f0f0;
+}
+
+.views-item.selected {
+  font-weight: 600;
+}
+
+.checkmark {
+  width: 16px;
+  height: 16px;
+  opacity: 0;
+}
+
+.checkmark.selected {
+  opacity: 1;
+}
 
 /* Advanced Sort Popup */
 .sort-popup {
@@ -84,17 +129,8 @@ body {
   font-weight: 600;
 }
 
-.sort-count {
-  font-size: 14px;
-}
-
-.add-sort-btn {
-  background: none;
-  border: none;
-  color: #0066cc;
-  font-size: 14px;
-  cursor: pointer;
-}
+.sort-count { font-size: 14px; }
+.add-sort-btn { background: none; border: none; color: #0066cc; font-size: 14px; cursor: pointer; }
 
 .sort-level {
   display: flex;
@@ -106,34 +142,10 @@ body {
 
 .sort-level:last-child { border-bottom: none; }
 
-.grip {
-  cursor: move;
-  color: #999;
-  font-size: 16px;
-}
-
-.remove-sort {
-  background: none;
-  border: none;
-  font-size: 18px;
-  color: #999;
-  cursor: pointer;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
+.grip { cursor: move; color: #999; font-size: 16px; }
+.remove-sort { background: none; border: none; font-size: 18px; color: #999; cursor: pointer; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
 .remove-sort:hover { color: #c00; }
-
-.sort-column, .sort-direction {
-  flex: 1;
-  padding: 6px 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 14px;
-}
+.sort-column, .sort-direction { flex: 1; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
 
 /* Table */
 table { width: 100%; border-collapse: collapse; background: white; font-size: 14px; }
@@ -156,6 +168,8 @@ tr.child-row { background: white; height: 24px; font-size: 13px; }
   background: #e0e1e9; color: #666;
 }
 
+.expand-icon { width: 16px; height: 16px; vertical-align: middle; }
+
 /* Totals */
 .totals-row {
   background: #eaeaea !important;
@@ -164,14 +178,17 @@ tr.child-row { background: white; height: 24px; font-size: 13px; }
 }
 .totals-row td:first-child, .totals-row td:nth-child(2) { text-align: left; }
 
-/* Rest unchanged */
+/* Buttons */
 .header-actions button { background: transparent; border: none; cursor: pointer; padding: 8px; border-radius: 4px; }
 .header-actions button:hover { background: #f0f0f0; }
 .header-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 .header-actions button img { height: 20px; }
 
+/* Footer & Debug */
 .footer-info { padding: 20px; background: #fff; border-top: 1px solid #ddd; }
 .status { font-weight: bold; color: #008000; margin-bottom: 10px; }
+.status.good { color: #008000; }
+.status.error { color: #d00; }
 .instructions { font-size: 14px; color: #555; margin-bottom: 10px; }
 .template-label { display: block; }
 
