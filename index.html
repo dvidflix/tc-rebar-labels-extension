@@ -19,30 +19,36 @@
     th.sorted-asc::after { content: " ▲"; }
     th.sorted-desc::after { content: " ▼"; }
     tr:hover { background: #f0f5ff; cursor: pointer; }
-    .selected { background: #d0e4ff !important; }
+    tr.selected { background: #d0e4ff !important; }
     .status { margin: 10px 0; font-weight: bold; }
     .good { color: #008000; }
     .error { color: #d00000; }
+    #debugConsole { background: #000; color: #0f0; padding: 10px; font-family: monospace; height: 250px; overflow-y: auto; margin-top: 20px; border-radius: 4px; }
+    .colorSwatch { width: 20px; height: 20px; display: inline-block; border: 1px solid #000; vertical-align: middle; }
   </style>
 </head>
 <body>
   <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Success!</strong> The extension is working. Select rebar bars and click Refresh.</p>
+  <p><strong>Instructions:</strong> Select one or more yellow rebar bars → click Refresh Rebar Data.</p>
 
   <label><strong>Label Template</strong> (recommended):</label>
-  <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm ({Rebar mark})</textarea>
-  <p><small>Other useful: {Shape code}, {Name}, {Start Point X}, {Start Point Y}, {End Point X}, {End Point Y}, {Grade}</small></p>
+  <textarea id="template" rows="3">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
+  <p><small>Other useful: {Size}, {Length}, {Rebar mark}, {Shape code}, {End Point X}, {End Point Y}, {Grade}</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
-  <button id="labelSelected" disabled>Label Selected Group</button>
+  <button id="colorGroups">Color Groups (Random)</button>
+  <button id="clearColors">Clear Colors</button>
+  <button id="selectGroups" disabled>Select Selected Groups</button>
+  <button id="labelSelected" disabled>Label Selected Groups</button>
   <button id="labelAll" disabled>Label All Groups</button>
   <button id="clear" disabled>Clear Labels</button>
 
   <table id="rebarTable">
     <thead>
       <tr>
+        <th></th> <!-- Color swatch -->
         <th data-sort="mark">Mark/Serial</th>
         <th data-sort="diameter">Diameter/Size</th>
         <th data-sort="shape">Shape code</th>
@@ -58,58 +64,51 @@
     <tbody></tbody>
   </table>
 
+  <h3>Debug Console</h3>
+  <pre id="debugConsole">Debug messages will appear here...</pre>
+
   <script>
     let tcApi;
     let groups = [];
     let markupIds = [];
-    let selectedGroup = null;
+    let selectedGroups = [];
+    let groupColors = {};
     let sortDirection = {};
 
+    const debugConsole = document.getElementById('debugConsole');
+
+    function debug(msg) {
+      const time = new Date().toLocaleTimeString();
+      debugConsole.textContent += `[${time}] ${msg}\n`;
+      debugConsole.scrollTop = debugConsole.scrollHeight;
+      console.log('DEBUG:', msg);
+    }
+
     async function init() {
+      debug('Initializing extension...');
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
+        debug('Connected successfully');
         document.getElementById('status').textContent = 'Connected! Select rebar bars and click Refresh.';
         document.getElementById('status').classList.add('good');
       } catch (err) {
+        debug('Connection error: ' + err.message);
         document.getElementById('status').textContent = 'Connection failed: ' + err.message;
         document.getElementById('status').classList.add('error');
       }
     }
 
     async function clearMarkups() {
+      debug('Clearing markups...');
       for (const id of markupIds) {
-        await tcApi.viewer.markup.removeMarkup(id).catch(() => {});
+        try {
+          await tcApi.viewer.markup.removeMarkup(id);
+        } catch (e) {}
       }
       markupIds = [];
     }
 
-    async function addCallout(anchor, labelPos, text) {
-      try {
-        const arrowId = await tcApi.viewer.markup.addArrowMarkup({
-          start: labelPos,
-          end: anchor,
-          color: { r: 0, g: 0, b: 0 },
-          width: 5
-        });
-        markupIds.push(arrowId);
-
-        const textId = await tcApi.viewer.markup.addTextMarkup({
-          text: text || 'Rebar',
-          position: labelPos,
-          color: { r: 0, g: 0, b: 0 },
-          backgroundColor: { r: 255, g: 255, b: 255, a: 0.95 },
-          fontSize: 40,
-          padding: 10
-        });
-        markupIds.push(textId);
-      } catch (e) {
-        console.warn('Failed to add markup:', e);
-      }
-    }
-
-    async function labelGroup(group, isOnly = false) {
-      if (isOnly) await clearMarkups();
-
+    async function addLabel(group) {
       const flat = flattenProps(group.sampleProps);
       let text = document.getElementById('template').value;
 
@@ -126,11 +125,47 @@
           y: (bounds.min.y + bounds.max.y) / 2,
           z: (bounds.min.z + bounds.max.z) / 2
         };
-        const labelPos = { x: anchor.x, y: anchor.y + 2.0, z: anchor.z + 4.0 };
+        const textPos = { x: anchor.x + 2.0, y: anchor.y + 2.0, z: anchor.z + 5.0 };
 
-        await addCallout(anchor, labelPos, text);
+        const textId = await tcApi.viewer.markup.addTextMarkup({
+          text: text,
+          position: textPos,
+          color: { r: 0, g: 0, b: 0 },
+          backgroundColor: { r: 255, g: 255, b: 255, a: 0.95 },
+          fontSize: 48,
+          padding: 12,
+          borderWidth: 2,
+          borderColor: { r: 0, g: 0, b: 0 }
+        });
+        markupIds.push(textId);
+
+        const arrowId = await tcApi.viewer.markup.addArrowMarkup({
+          start: textPos,
+          end: anchor,
+          color: { r: 0, g: 0, b: 0 },
+          width: 6
+        });
+        markupIds.push(arrowId);
+        debug('Label added successfully');
       } catch (e) {
-        console.warn('Label error:', e);
+        debug('Label error: ' + e.message);
+      }
+    }
+
+    async function labelSelectedGroups() {
+      if (selectedGroups.length === 0) return;
+      await clearMarkups();
+      debug('Labeling selected groups');
+      for (const group of selectedGroups) {
+        await addLabel(group);
+      }
+    }
+
+    async function labelAllGroups() {
+      await clearMarkups();
+      debug('Labeling all groups');
+      for (const group of groups) {
+        await addLabel(group);
       }
     }
 
@@ -151,17 +186,60 @@
       return flat;
     }
 
+    function randomColor() {
+      return {
+        r: Math.floor(Math.random() * 256),
+        g: Math.floor(Math.random() * 256),
+        b: Math.floor(Math.random() * 256)
+      };
+    }
+
+    async function colorGroups() {
+      debug('Applying random colors to groups...');
+      await tcApi.viewer.setObjectState([]);
+      groupColors = {};
+
+      for (const group of groups) {
+        const key = `${group.mark}|${group.diameter}|${group.length}|${group.shape}|${group.modelId}`;
+        groupColors[key] = randomColor();
+        group.color = groupColors[key]; // store for table
+
+        await tcApi.viewer.setObjectState({
+          modelId: group.modelId,
+          objectIds: group.objectIds,
+          color: groupColors[key]
+        });
+      }
+      renderTable(); // update table with color swatches
+      debug('Random colors applied');
+    }
+
+    async function clearColors() {
+      debug('Clearing colors...');
+      groupColors = {};
+      groups.forEach(g => g.color = null);
+      await tcApi.viewer.setObjectState([]);
+      renderTable();
+    }
+
+    async function selectSelectedGroups() {
+      if (selectedGroups.length === 0) return;
+      debug('Selecting groups in viewer...');
+      let allIds = [];
+      let modelId = selectedGroups[0].modelId;
+      selectedGroups.forEach(g => allIds = allIds.concat(g.objectIds));
+      await tcApi.viewer.isolate({ modelId, objectIds: allIds });
+      await tcApi.viewer.zoomTo({ modelId, objectIds: allIds });
+    }
+
     function sortTable(column, dir) {
       groups.sort((a, b) => {
-        let valA = a[column];
-        let valB = b[column];
-        if (typeof valA === 'string') valA = valA.toLowerCase();
-        if (typeof valB === 'string') valB = valB.toLowerCase();
-        if (valA < valB) return dir === 'asc' ? -1 : 1;
-        if (valA > valB) return dir === 'asc' ? 1 : -1;
-        return 0;
+        let A = a[column] ?? '';
+        let B = b[column] ?? '';
+        if (typeof A === 'string') A = A.toLowerCase();
+        if (typeof B === 'string') B = B.toLowerCase();
+        return (A < B ? -1 : A > B ? 1 : 0) * (dir === 'asc' ? 1 : -1);
       });
-
       renderTable();
     }
 
@@ -169,8 +247,12 @@
       const tbody = document.querySelector('#rebarTable tbody');
       tbody.innerHTML = '';
       groups.forEach(group => {
+        const color = group.color || { r: 255, g: 255, b: 255 };
+        const swatch = `<div class="colorSwatch" style="background-color: rgb(${color.r},${color.g},${color.b});"></div>`;
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
+          <td>${swatch}</td>
           <td>${group.mark}</td>
           <td>${group.diameter}</td>
           <td>${group.shape}</td>
@@ -182,48 +264,66 @@
           <td>${group.quantity}</td>
           <td>${group.totalLength}</td>
         `;
-        tr.onclick = async () => {
-          document.querySelectorAll('#rebarTable tr').forEach(r => r.classList.remove('selected'));
-          tr.classList.add('selected');
-          selectedGroup = group;
-          document.getElementById('labelSelected').disabled = false;
+        tr.onclick = (e) => {
+          if (e.ctrlKey || e.metaKey) {
+            tr.classList.toggle('selected');
+          } else if (e.shiftKey && selectedGroups.length > 0) {
+            const rows = Array.from(tbody.children);
+            const cur = rows.indexOf(tr);
+            const last = rows.findIndex(r => r.classList.contains('selected'));
+            const start = Math.min(cur, last);
+            const end = Math.max(cur, last);
+            rows.slice(start, end + 1).forEach(r => r.classList.add('selected'));
+          } else {
+            tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+            tr.classList.add('selected');
+          }
 
-          await tcApi.viewer.isolate({ modelId: group.modelId, objectIds: group.objectIds });
-          await tcApi.viewer.zoomTo({ modelId: group.modelId, objectIds: group.objectIds });
+          selectedGroups = groups.filter((_, i) => tbody.children[i].classList.contains('selected'));
+          document.getElementById('selectGroups').disabled = selectedGroups.length === 0;
+          document.getElementById('labelSelected').disabled = selectedGroups.length === 0;
         };
         tbody.appendChild(tr);
       });
     }
 
     async function processRebar() {
+      debug('=== REFRESH STARTED ===');
       await clearMarkups();
       groups = [];
-      selectedGroup = null;
+      selectedGroups = [];
+      document.getElementById('selectGroups').disabled = true;
       document.getElementById('labelSelected').disabled = true;
       document.getElementById('labelAll').disabled = true;
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="10">Processing...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11">Processing...</td></tr>';
 
       try {
+        debug('Fetching selection...');
         const selection = await tcApi.viewer.getSelection();
+        debug(`Selection retrieved: ${selection.length} items`);
+
         if (selection.length === 0) throw new Error('No objects selected.');
 
         let allRebar = [];
         for (const sel of selection) {
           const modelId = sel.modelId;
           const runtimeIds = sel.objectRuntimeIds || [];
+          debug(`Processing: modelId=${modelId}, runtimeIds=${runtimeIds.length}`);
+
           if (!modelId || runtimeIds.length === 0) continue;
 
           const propsArray = await tcApi.viewer.getObjectProperties(modelId, runtimeIds);
+          debug(`Got ${propsArray.length} property sets`);
 
           propsArray.forEach((props, i) => {
-            const hasRebarPset = props.properties?.some(p => 
+            const hasRebar = props.properties?.some(p => 
               p.name === 'Tekla Reinforcement - Bending List' || 
               p.name === 'ICOS Rebar'
             );
-            if (hasRebarPset) {
+            if (hasRebar) {
               allRebar.push({
                 id: runtimeIds[i],
                 props: props,
@@ -233,7 +333,9 @@
           });
         }
 
-        if (allRebar.length === 0) throw new Error('No rebar found in selection.');
+        debug(`Found ${allRebar.length} rebar elements`);
+
+        if (allRebar.length === 0) throw new Error('No rebar elements found.');
 
         const groupMap = {};
         for (const item of allRebar) {
@@ -275,28 +377,30 @@
         });
 
         renderTable();
+        await colorGroups();
 
         document.getElementById('labelAll').disabled = false;
         document.getElementById('clear').disabled = false;
         document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${allRebar.length} bars.`;
         document.getElementById('status').classList.add('good');
+        debug('Refresh completed');
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="10">Error: ${err.message}</td></tr>`;
+        debug('ERROR: ' + err.message);
+        tbody.innerHTML = `<tr><td colspan="11">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
         document.getElementById('status').classList.add('error');
       }
+      debug('=== REFRESH ENDED ===');
     }
 
-    // Sorting
     document.querySelectorAll('th[data-sort]').forEach(th => {
       th.onclick = () => {
         const col = th.dataset.sort;
-        const currentDir = sortDirection[col] || 'asc';
-        const newDir = currentDir === 'asc' ? 'desc' : 'asc';
-        sortDirection = {}; // reset others
+        const cur = sortDirection[col] || 'asc';
+        const newDir = cur === 'asc' ? 'desc' : 'asc';
+        sortDirection = {};
         sortDirection[col] = newDir;
 
-        // Update arrows
         document.querySelectorAll('th').forEach(h => h.className = '');
         th.className = 'sorted-' + newDir;
 
@@ -305,12 +409,12 @@
     });
 
     document.getElementById('refresh').onclick = processRebar;
+    document.getElementById('colorGroups').onclick = colorGroups;
+    document.getElementById('clearColors').onclick = clearColors;
+    document.getElementById('selectGroups').onclick = selectSelectedGroups;
+    document.getElementById('labelSelected').onclick = labelSelectedGroups;
+    document.getElementById('labelAll').onclick = labelAllGroups;
     document.getElementById('clear').onclick = clearMarkups;
-    document.getElementById('labelSelected').onclick = () => selectedGroup && labelGroup(selectedGroup, true);
-    document.getElementById('labelAll').onclick = async () => {
-      await clearMarkups();
-      for (const g of groups) await labelGroup(g);
-    };
 
     init();
   </script>
