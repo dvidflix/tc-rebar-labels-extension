@@ -5,7 +5,6 @@ body {
   background: #f9f9f9;
 }
 
-/* Header */
 .header {
   display: flex;
   justify-content: space-between;
@@ -26,7 +25,7 @@ body {
 .header-title {
   font-size: 18px;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .header-actions button {
@@ -49,31 +48,31 @@ body {
   height: 20px;
 }
 
-/* Views Dropdown - matching the screenshot */
+/* Dropdown */
 .views-dropdown-container {
   position: relative;
   display: inline-block;
 }
 
 .views-dropdown-button {
-  background: transparent;
-  border: none;
-  padding: 8px 24px 8px 12px;
-  font-size: 16px;
-  font-weight: 600;
+  background: white;
+  border: 1px solid #ccc;
+  padding: 6px 32px 6px 12px;
+  font-size: 14px;
+  font-weight: normal;
   color: #000;
   cursor: pointer;
   text-align: left;
   min-width: 220px;
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"><path fill="%23333" d="M7 10l5 5 5-5z"/></svg>');
+  border-radius: 4px;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="%23333" d="M7 10l5 5 5-5z"/></svg>');
   background-repeat: no-repeat;
-  background-position: right 12px center;
+  background-position: right 10px center;
 }
 
-.views-dropdown-button:hover,
-.views-dropdown-button:focus {
-  background-color: #ff0; /* Yellow highlight as in screenshot */
-  outline: none;
+.views-dropdown-button:hover {
+  background-color: #f8f8f8;
+  border-color: #999;
 }
 
 .views-dropdown-menu {
@@ -83,11 +82,11 @@ body {
   left: 0;
   background: white;
   border: 1px solid #ccc;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.15);
   min-width: 100%;
   z-index: 1000;
   border-radius: 4px;
-  overflow: hidden;
+  margin-top: 4px;
 }
 
 .views-dropdown-menu.show {
@@ -95,8 +94,8 @@ body {
 }
 
 .views-item {
-  padding: 10px 16px;
-  font-size: 15px;
+  padding: 9px 14px;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -121,10 +120,6 @@ body {
   right: 20px;
 }
 
-.sort-popup-content {
-  padding: 8px 0;
-}
-
 .sort-popup-content h4 {
   margin: 0 12px 8px;
   font-size: 14px;
@@ -147,7 +142,7 @@ body {
   background: #f0f0f0;
 }
 
-/* Table (unchanged) */
+/* Table */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -171,25 +166,15 @@ th {
 
 th:hover { background: #d0d1d9; }
 
-tr.group-row {
-  background: white;
-  height: 24px;
-}
+tr.group-row { background: white; height: 24px; }
 tr.group-row:hover { background: #f0f0f0; cursor: pointer; }
 tr.group-row.selected { background: #d0e4ff !important; }
 
-tr.child-row {
-  background: white;
-  height: 18px;
-  font-size: 13px;
-}
+tr.child-row { background: white; height: 18px; font-size: 13px; }
 tr.child-row:hover { background: #f5f5f5; }
 tr.child-row.selected { background: #d0e4ff !important; }
 
-.expand-cell {
-  text-align: center;
-  width: 40px;
-}
+.expand-cell { text-align: center; width: 40px; }
 
 .child-row td:nth-child(2),
 .child-row td:nth-child(7),
@@ -203,15 +188,22 @@ tr.child-row.selected { background: #d0e4ff !important; }
 .numeric { text-align: right; }
 .center { text-align: center; }
 
-.expand-icon {
-  width: 16px;
-  height: 16px;
-  vertical-align: middle;
+.expand-icon { width: 16px; height: 16px; vertical-align: middle; }
+
+/* Totals row */
+.totals-row {
+  background: #eaeaea !important;
+  font-weight: bold;
+  border-top: 3px double #999;
 }
 
-.empty-cell {
-  color: #999;
-  font-style: italic;
+.totals-row td {
+  text-align: right;
+}
+
+.totals-row td:first-child,
+.totals-row td:nth-child(2) {
+  text-align: left;
 }
 
 /* Footer */

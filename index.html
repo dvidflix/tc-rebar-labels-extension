@@ -12,7 +12,6 @@
   <div class="header">
     <div class="header-left">
       <div class="header-title">Rebar Labels</div>
-      <!-- Dropdown below the title, matching the screenshot style -->
       <div class="views-dropdown-container">
         <button id="viewsDropdown" class="views-dropdown-button">
           All views in project
@@ -98,7 +97,7 @@
     let sortColumns = [];
     let expandedGroups = new Set();
     let coloringActive = false;
-    let currentViewMode = 'all'; // Default: All views in project
+    let currentViewMode = 'all';
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -109,7 +108,7 @@
       console.log('DEBUG:', msg);
     }
 
-    // Views Dropdown Functionality
+    // Dropdown
     const viewsBtn = document.getElementById('viewsDropdown');
     const viewsMenu = document.getElementById('viewsMenu');
 
@@ -121,14 +120,10 @@
     document.querySelectorAll('#viewsMenu .views-item').forEach(item => {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
-
         document.querySelectorAll('#viewsMenu .views-item').forEach(i => i.classList.remove('selected'));
         item.classList.add('selected');
-
         viewsBtn.textContent = item.textContent.trim();
         currentViewMode = item.getAttribute('data-value');
-
-        console.log('View mode changed to:', currentViewMode);
         viewsMenu.classList.remove('show');
       });
     });
@@ -150,9 +145,7 @@
 
     async function clearMarkups() {
       for (const id of markupIds) {
-        try {
-          await tcApi.viewer.markup.removeMarkup(id);
-        } catch (e) {}
+        try { await tcApi.viewer.markup.removeMarkup(id); } catch (e) {}
       }
       markupIds = [];
     }
@@ -160,105 +153,57 @@
     async function addLabel(group) {
       const flat = flattenProps(group.sampleProps);
       let text = document.getElementById('template').value;
-
       for (const [key, value] of Object.entries(flat)) {
         text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
       }
-      text = text.replace(/\{[^}]+\}/g, '').trim();
-      if (!text) text = 'Rebar';
+      text = text.replace(/\{[^}]+\}/g, '').trim() || 'Rebar';
 
       try {
         const textPos = { x: 0, y: 0, z: 5.0 };
         const anchor = { x: 0, y: 0, z: 0 };
-
         const textId = await tcApi.viewer.markup.addTextMarkup({
-          text: text,
-          position: textPos,
-          color: { r: 0, g: 0, b: 0 },
+          text, position: textPos, color: { r: 0, g: 0, b: 0 },
           backgroundColor: { r: 255, g: 255, b: 255, a: 0.95 },
-          fontSize: 48,
-          padding: 12,
-          borderWidth: 2,
-          borderColor: { r: 0, g: 0, b: 0 }
+          fontSize: 48, padding: 12, borderWidth: 2, borderColor: { r: 0, g: 0, b: 0 }
         });
         markupIds.push(textId);
-
         const arrowId = await tcApi.viewer.markup.addArrowMarkup({
-          start: textPos,
-          end: anchor,
-          color: { r: 0, g: 0, b: 0 },
-          width: 6
+          start: textPos, end: anchor, color: { r: 0, g: 0, b: 0 }, width: 6
         });
         markupIds.push(arrowId);
-      } catch (e) {
-        debug('Label error: ' + e.message);
-      }
+      } catch (e) { debug('Label error: ' + e.message); }
     }
 
-    async function labelSelectedGroups() {
-      if (!selectedGroup) return;
-      await clearMarkups();
-      await addLabel(selectedGroup);
-    }
-
-    async function labelAllGroups() {
-      await clearMarkups();
-      for (const group of groups) {
-        await addLabel(group);
-      }
-    }
+    async function labelSelectedGroups() { if (selectedGroup) { await clearMarkups(); await addLabel(selectedGroup); } }
+    async function labelAllGroups() { await clearMarkups(); for (const group of groups) await addLabel(group); }
 
     function flattenProps(props) {
       const flat = {};
-      if (!props || !props.properties) return flat;
-
+      if (!props?.properties) return flat;
       props.properties.forEach(pset => {
-        if (pset.properties) {
-          pset.properties.forEach(prop => {
-            if (prop.value !== undefined) {
-              flat[prop.name] = prop.value;
-            }
-          });
-        }
+        if (pset.properties) pset.properties.forEach(prop => {
+          if (prop.value !== undefined) flat[prop.name] = prop.value;
+        });
       });
       return flat;
     }
 
-    function randomColor() {
-      return {
-        r: Math.floor(Math.random() * 256),
-        g: Math.floor(Math.random() * 256),
-        b: Math.floor(Math.random() * 256),
-        a: 255
-      };
-    }
+    function randomColor() { return { r: Math.floor(Math.random() * 256), g: Math.floor(Math.random() * 256), b: Math.floor(Math.random() * 256), a: 255 }; }
 
     async function toggleColorGroups() {
       coloringActive = !coloringActive;
-      const button = document.getElementById('colorGroups');
-      button.classList.toggle('active', coloringActive);
-
-      if (coloringActive) {
-        await colorGroups();
-      } else {
-        await clearColors();
-      }
+      document.getElementById('colorGroups').classList.toggle('active', coloringActive);
+      coloringActive ? await colorGroups() : await clearColors();
     }
 
     async function colorGroups() {
       debug('Applying random colors...');
-      try {
-        await tcApi.viewer.setObjectState([]);
-      } catch (e) {}
-
+      try { await tcApi.viewer.setObjectState([]); } catch (e) {}
       groupColors = {};
-
       for (const group of groups) {
-        const key = group.key;
         const color = randomColor();
-        groupColors[key] = color;
+        groupColors[group.key] = color;
         group.color = color;
-
         try {
           await tcApi.viewer.setObjectState({
             modelId: group.modelId,
@@ -273,44 +218,38 @@
     async function clearColors() {
       groupColors = {};
       groups.forEach(g => g.color = null);
-      try {
-        await tcApi.viewer.setObjectState([]);
-      } catch (e) {}
+      try { await tcApi.viewer.setObjectState([]); } catch (e) {}
       renderTable();
     }
 
     async function selectAndZoomGroup(group) {
-      const modelObjectIds = [{
-        modelId: group.modelId,
-        objectRuntimeIds: group.objectIds
-      }];
-
+      const modelObjectIds = [{ modelId: group.modelId, objectRuntimeIds: group.objectIds }];
       try {
         await tcApi.viewer.setSelection({ modelObjectIds }, "set");
         await tcApi.viewer.zoomTo({ modelObjectIds });
-      } catch (e) {
-        debug('Select/zoom error: ' + e.message);
-      }
+      } catch (e) { debug('Select/zoom error: ' + e.message); }
     }
 
-    async function zoomToSelected() {
-      if (!selectedGroup) return;
-      await selectAndZoomGroup(selectedGroup);
-    }
+    async function zoomToSelected() { if (selectedGroup) await selectAndZoomGroup(selectedGroup); }
 
+    // Sorting with proper numeric/string handling
     function sortTable() {
       groups.sort((a, b) => {
         for (const {col, dir} of sortColumns) {
           let A = a[col] ?? '';
           let B = b[col] ?? '';
-          const numA = parseFloat(A);
-          const numB = parseFloat(B);
-          if (!isNaN(numA) && !isNaN(numB)) {
-            A = numA;
-            B = numB;
-          }
-          if (A !== B) {
-            return (A < B ? -1 : 1) * (dir === 'asc' ? 1 : -1);
+
+          if (col === 'shape') {
+            // Shape code as string
+            if (A !== B) return (A.localeCompare(B)) * (dir === 'asc' ? 1 : -1);
+          } else {
+            // All other columns as numbers if possible
+            const numA = parseFloat(A);
+            const numB = parseFloat(B);
+            if (!isNaN(numA) && !isNaN(numB)) {
+              A = numA; B = numB;
+            }
+            if (A !== B) return (A < B ? -1 : 1) * (dir === 'asc' ? 1 : -1);
           }
         }
         return 0;
@@ -322,7 +261,18 @@
       const tbody = document.querySelector('#rebarTable tbody');
       tbody.innerHTML = '';
 
+      let totalBars = 0;
+      let maxEndX = -Infinity;
+      let maxEndY = -Infinity;
+
       groups.forEach(group => {
+        totalBars += group.quantity;
+
+        const endX = parseFloat(group.commonEndX);
+        const endY = parseFloat(group.commonEndY);
+        if (!isNaN(endX)) maxEndX = Math.max(maxEndX, endX);
+        if (!isNaN(endY)) maxEndY = Math.max(maxEndY, endY);
+
         const color = group.color || { r: 255, g: 255, b: 255 };
 
         const groupTr = document.createElement('tr');
@@ -332,23 +282,20 @@
             <img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon" alt="Expand">
           </td>
           <td class="center">${group.mark}</td>
-          <td class="numeric">${group.commonStartX || '<span class="empty-cell">--</span>'}</td>
-          <td class="numeric">${group.commonStartY || '<span class="empty-cell">--</span>'}</td>
-          <td class="numeric">${group.commonEndX || '<span class="empty-cell">--</span>'}</td>
-          <td class="numeric">${group.commonEndY || '<span class="empty-cell">--</span>'}</td>
-          <td class="center">${group.diameter || '<span class="empty-cell">--</span>'}</td>
-          <td>${group.shape || '<span class="empty-cell">--</span>'}</td>
+          <td class="numeric">${group.commonStartX || '--'}</td>
+          <td class="numeric">${group.commonStartY || '--'}</td>
+          <td class="numeric">${group.commonEndX || '--'}</td>
+          <td class="numeric">${group.commonEndY || '--'}</td>
+          <td class="center">${group.diameter || '--'}</td>
+          <td>${group.shape || '--'}</td>
           <td class="numeric">${group.length}</td>
           <td class="center">${group.quantity}</td>
         `;
+
         groupTr.onclick = (e) => {
-          if (e.target.classList.contains('expand-icon') || e.target.tagName === 'IMG') {
+          if (e.target.classList.contains('expand-icon') || e.target.closest('.expand-icon')) {
             e.stopPropagation();
-            if (expandedGroups.has(group.key)) {
-              expandedGroups.delete(group.key);
-            } else {
-              expandedGroups.add(group.key);
-            }
+            expandedGroups.has(group.key) ? expandedGroups.delete(group.key) : expandedGroups.add(group.key);
             renderTable();
           } else {
             tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
@@ -367,12 +314,12 @@
             childTr.innerHTML = `
               <td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});"></td>
               <td class="center gray-bg">${group.mark}</td>
-              <td class="numeric">${bar.startX || '<span class="empty-cell">--</span>'}</td>
-              <td class="numeric">${bar.startY || '<span class="empty-cell">--</span>'}</td>
-              <td class="numeric">${bar.endX || '<span class="empty-cell">--</span>'}</td>
-              <td class="numeric">${bar.endY || '<span class="empty-cell">--</span>'}</td>
-              <td class="center gray-bg">${group.diameter || '<span class="empty-cell">--</span>'}</td>
-              <td class="gray-bg">${group.shape || '<span class="empty-cell">--</span>'}</td>
+              <td class="numeric">${bar.startX || '--'}</td>
+              <td class="numeric">${bar.startY || '--'}</td>
+              <td class="numeric">${bar.endX || '--'}</td>
+              <td class="numeric">${bar.endY || '--'}</td>
+              <td class="center gray-bg">${group.diameter || '--'}</td>
+              <td class="gray-bg">${group.shape || '--'}</td>
               <td class="numeric gray-bg">${group.length}</td>
               <td class="center gray-bg">${group.quantity}</td>
             `;
@@ -389,6 +336,25 @@
           });
         }
       });
+
+      // Totals row
+      if (groups.length > 0) {
+        const totalsTr = document.createElement('tr');
+        totalsTr.className = 'totals-row';
+        totalsTr.innerHTML = `
+          <td colspan="1"><strong>Total</strong></td>
+          <td class="center"><strong>${groups.length} groups</strong></td>
+          <td class="numeric">--</td>
+          <td class="numeric">--</td>
+          <td class="numeric">${isFinite(maxEndX) ? 'Max ' + maxEndX : '--'}</td>
+          <td class="numeric">${isFinite(maxEndY) ? 'Max ' + maxEndY : '--'}</td>
+          <td class="center">--</td>
+          <td>--</td>
+          <td class="numeric">--</td>
+          <td class="center"><strong>${totalBars}</strong></td>
+        `;
+        tbody.appendChild(totalsTr);
+      }
     }
 
     async function processRebar() {
@@ -408,12 +374,9 @@
         let objects = [];
 
         if (currentViewMode === 'selected') {
-          // Original behavior: use current selection
           debug('Mode: Selected objects');
           const selection = await tcApi.viewer.getSelection();
-          debug(`Selection retrieved: ${selection.length} items`);
           if (selection.length === 0) throw new Error('No objects selected.');
-
           for (const sel of selection) {
             const modelId = sel.modelId;
             const runtimeIds = sel.objectRuntimeIds || [];
@@ -425,21 +388,14 @@
               }
             });
           }
-
         } else {
-          // All or Visible: get objects using getObjects with optional visibility filter
-          const objectState = currentViewMode === 'visible' 
-            ? { visibility: 'visible' } 
-            : undefined;
-
+          const objectState = currentViewMode === 'visible' ? { visibility: 'visible' } : undefined;
           debug(`Mode: ${currentViewMode === 'all' ? 'All views in project' : 'Visible objects'}`);
           const result = await tcApi.viewer.getObjects({ objectState });
-
           for (const item of result) {
             const modelId = item.modelId;
             const runtimeIds = item.objectRuntimeIds || [];
             if (runtimeIds.length === 0) continue;
-
             const propsArray = await tcApi.viewer.getObjectProperties(modelId, runtimeIds);
             propsArray.forEach((props, i) => {
               if (hasRebarProps(props)) {
@@ -451,11 +407,9 @@
 
         if (objects.length === 0) throw new Error('No rebar elements found.');
 
-        // Grouping logic (same as before)
         const groupMap = {};
         for (const item of objects) {
           const flat = flattenProps(item.props);
-
           const mark = flat['Serial number'] || flat['Rebar mark'] || flat['Group position number'] || 'Unknown';
           const dia = flat['Size'] || '';
           const shape = flat['Shape'] || flat['Shape code'] || '';
@@ -465,20 +419,13 @@
 
           if (!groupMap[key]) {
             groupMap[key] = {
-              key,
-              mark,
-              diameter: dia,
-              shape,
-              length,
-              objectIds: [],
-              sampleProps: item.props,
-              modelId: item.modelId,
+              key, mark, diameter: dia, shape, length,
+              objectIds: [], sampleProps: item.props, modelId: item.modelId,
               individualBars: []
             };
           }
 
           groupMap[key].objectIds.push(item.id);
-
           groupMap[key].individualBars.push({
             startX: flat['Start Point X'] || '',
             startY: flat['Start Point Y'] || '',
@@ -490,16 +437,12 @@
         groups = Object.values(groupMap);
         groups.forEach(g => {
           g.quantity = g.objectIds.length;
-
           const startsX = new Set(g.individualBars.map(b => b.startX));
           g.commonStartX = startsX.size === 1 ? g.individualBars[0].startX : '';
-
           const startsY = new Set(g.individualBars.map(b => b.startY));
           g.commonStartY = startsY.size === 1 ? g.individualBars[0].startY : '';
-
           const endsX = new Set(g.individualBars.map(b => b.endX));
           g.commonEndX = endsX.size === 1 ? g.individualBars[0].endX : '';
-
           const endsY = new Set(g.individualBars.map(b => b.endY));
           g.commonEndY = endsY.size === 1 ? g.individualBars[0].endY : '';
         });
@@ -527,7 +470,7 @@
       );
     }
 
-    // Sort popup (unchanged)
+    // Sort popup
     const sortPopup = document.getElementById('sortPopup');
     const sortOptions = document.getElementById('sortOptions');
 
@@ -539,22 +482,15 @@
       columns.forEach(col => {
         const li = document.createElement('li');
         li.textContent = document.querySelector(`th[data-sort="${col}"]`).textContent.trim();
-
         const existing = sortColumns.find(s => s.col === col);
-        if (existing) {
-          li.textContent += existing.dir === 'asc' ? ' ▲' : ' ▼';
-        }
+        if (existing) li.textContent += existing.dir === 'asc' ? ' ▲' : ' ▼';
 
         li.onclick = (e) => {
           e.stopPropagation();
-          const existingIndex = sortColumns.findIndex(s => s.col === col);
-          if (existingIndex !== -1) {
-            const currentDir = sortColumns[existingIndex].dir;
-            if (currentDir === 'asc') {
-              sortColumns[existingIndex].dir = 'desc';
-            } else {
-              sortColumns.splice(existingIndex, 1);
-            }
+          const idx = sortColumns.findIndex(s => s.col === col);
+          if (idx !== -1) {
+            if (sortColumns[idx].dir === 'asc') sortColumns[idx].dir = 'desc';
+            else sortColumns.splice(idx, 1);
           } else {
             sortColumns.unshift({ col, dir: 'asc' });
           }
@@ -570,9 +506,7 @@
       sortPopup.style.display = 'block';
     };
 
-    document.addEventListener('click', () => {
-      sortPopup.style.display = 'none';
-    });
+    document.addEventListener('click', () => { sortPopup.style.display = 'none'; });
 
     document.getElementById('refresh').onclick = processRebar;
     document.getElementById('colorGroups').onclick = toggleColorGroups;
