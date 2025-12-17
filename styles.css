@@ -1,38 +1,37 @@
-body { 
-  font-family: 'Open Sans', Arial, sans-serif; 
-  margin: 0; 
-  padding: 0; 
-  background: #f9f9f9; 
+body {
+  font-family: 'Open Sans', Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: #f9f9f9;
 }
 
-/* Header - Trimble Connect style */
+/* Header - white with black text/icons */
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #1a5fb4;
-  color: white;
+  background: #fff;
+  color: #000;
   padding: 12px 20px;
   font-size: 18px;
-  font-weight: bold;
+  font-weight: 600;
+  border-bottom: 1px solid #ddd;
 }
 
 .header-actions button {
   background: transparent;
   border: none;
-  color: white;
   cursor: pointer;
   padding: 8px;
   border-radius: 4px;
 }
 
 .header-actions button:hover {
-  background: rgba(255,255,255,0.2);
+  background: #f0f0f0;
 }
 
 .header-actions button img {
   height: 20px;
-  filter: brightness(0) invert(1);
 }
 
 /* Actions */
@@ -45,7 +44,7 @@ body {
   border-bottom: 1px solid #ddd;
 }
 
-/* Table */
+/* Table - condensed, 24px rows */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -54,29 +53,33 @@ table {
 }
 
 th, td {
-  border: 1px solid #c8c8c8; /* slightly darker grey */
-  padding: 8px;
+  border: 1px solid #c8c8c8;
+  padding: 4px 8px;
   text-align: left;
-  height: 32px; /* row height */
+  height: 24px;
 }
 
 th {
-  background: #e0e0e0;
+  background: #e0e1e9;
   color: #333;
   cursor: pointer;
   user-select: none;
   font-weight: 600;
 }
 
-th:hover { background: #d0d0d0; }
+th:hover { background: #d0d1d9; }
 
-tr.group-row { background: #f5f5f5; }
-tr.group-row:hover { background: #eaeaea; cursor: pointer; }
+tr.group-row { background: white; }
+tr.group-row:hover { background: #f0f0f0; cursor: pointer; }
 tr.group-row.selected { background: #d0e4ff !important; }
 
-tr.child-row { background: #fafafa; }
-tr.child-row:hover { background: #f0f0f0; }
+tr.child-row { background: white; }
+tr.child-row:hover { background: #f5f5f5; }
 tr.child-row.selected { background: #d0e4ff !important; }
+
+tr.child-row td.empty-cell {
+  background: #e0e1e9;
+}
 
 .expand-icon {
   width: 16px;
@@ -84,20 +87,13 @@ tr.child-row.selected { background: #d0e4ff !important; }
   vertical-align: middle;
 }
 
-.colorSwatch {
-  width: 16px;
-  height: 16px;
-  display: inline-block;
-  border: 1px solid #000;
-  vertical-align: middle;
-}
-
+/* Empty cells */
 .empty-cell {
   color: #999;
   font-style: italic;
 }
 
-/* Footer info */
+/* Footer */
 .footer-info {
   padding: 20px;
   background: #fff;

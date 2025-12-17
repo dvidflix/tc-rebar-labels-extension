@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rebar Labels Extension</title>
+  <title>Rebar Labels</title>
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="header">
-    <div class="header-title">Rebar Labels Extension</div>
+    <div class="header-title">Rebar Labels</div>
     <div class="header-actions">
       <button id="refresh" title="Refresh Rebar Data">
         <img src="update.svg" alt="Refresh">
@@ -41,7 +41,6 @@
     <thead>
       <tr>
         <th></th> <!-- Expand -->
-        <th></th> <!-- Color swatch -->
         <th data-sort="mark">Mark</th>
         <th data-sort="startX">Start X</th>
         <th data-sort="startY">Start Y</th>
@@ -105,7 +104,6 @@
     }
 
     async function clearMarkups() {
-      debug('Clearing markups...');
       for (const id of markupIds) {
         try {
           await tcApi.viewer.markup.removeMarkup(id);
@@ -226,7 +224,7 @@
       renderTable();
     }
 
-    async function selectSelectedGroups() {
+    async function selectAndZoomGroups() {
       if (selectedGroups.length === 0) return;
 
       const modelObjectIds = selectedGroups.map(g => ({
@@ -264,14 +262,13 @@
 
       groups.forEach(group => {
         const color = group.color || { r: 255, g: 255, b: 255 };
-        const swatch = `<div class="colorSwatch" style="background-color: rgb(${color.r},${color.g},${color.b});"></div>`;
 
         // Group row
         const groupTr = document.createElement('tr');
         groupTr.className = 'group-row';
+        groupTr.style.backgroundColor = `rgb(${color.r},${color.g},${color.b})`;
         groupTr.innerHTML = `
           <td><img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon" alt="Expand"></td>
-          <td>${swatch}</td>
           <td>${group.mark}</td>
           <td>${group.commonStartX || '<span class="empty-cell">--</span>'}</td>
           <td>${group.commonStartY || '<span class="empty-cell">--</span>'}</td>
@@ -296,7 +293,7 @@
             groupTr.classList.add('selected');
             selectedGroups = [group];
             document.getElementById('labelSelected').disabled = false;
-            selectSelectedGroups();
+            selectAndZoomGroups();
           }
         };
         tbody.appendChild(groupTr);
@@ -307,7 +304,6 @@
             const childTr = document.createElement('tr');
             childTr.className = 'child-row';
             childTr.innerHTML = `
-              <td></td>
               <td></td>
               <td></td>
               <td>${bar.startX || '<span class="empty-cell">--</span>'}</td>
@@ -326,7 +322,7 @@
               childTr.classList.add('selected');
               selectedGroups = [group];
               document.getElementById('labelSelected').disabled = false;
-              selectSelectedGroups();
+              selectAndZoomGroups();
             };
             tbody.appendChild(childTr);
           });
@@ -345,7 +341,7 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="11">Processing...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10">Processing...</td></tr>';
 
       try {
         debug('Fetching selection...');
@@ -441,7 +437,7 @@
         debug('Refresh completed');
       } catch (err) {
         debug('ERROR: ' + err.message);
-        tbody.innerHTML = `<tr><td colspan="11">Error: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
         document.getElementById('status').classList.add('error');
       }
@@ -461,12 +457,10 @@
           sortColumns.unshift({ col, dir: 'asc' });
         }
 
-        document.querySelectorAll('th').forEach(h => h.className = '');
+        document.querySelectorAll('th').forEach(h => h.innerHTML = h.innerHTML.replace(/ (▲|▼)$/, ''));
         sortColumns.forEach(s => {
           const header = document.querySelector(`th[data-sort="${s.col}"]`);
-          if (header) {
-            header.innerHTML = header.innerHTML.replace(/ (▲|▼)$/, '') + (s.dir === 'asc' ? ' ▲' : ' ▼');
-          }
+          if (header) header.innerHTML += s.dir === 'asc' ? ' ▲' : ' ▼';
         });
 
         sortTable();
