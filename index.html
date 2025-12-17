@@ -33,13 +33,14 @@
 
   <p><strong>Instructions:</strong> Select one or more yellow rebar bars → click Refresh Rebar Data.</p>
 
-  <label><strong>Label Template</strong> (copy for manual labeling):</label>
+  <label><strong>Label Template</strong> (recommended):</label>
   <textarea id="template" rows="3">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
   <p><small>Other useful: {Size}, {Length}, {Rebar mark}, {Shape code}, {End Point X}, {End Point Y}, {Grade}</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
   <button id="colorGroups">Color Groups (Random)</button>
   <button id="clearColors">Clear Colors</button>
+  <button id="testColor">Test Color All (Red)</button>
   <button id="selectGroups" disabled>Select & Zoom Selected Groups</button>
 
   <table id="rebarTable">
@@ -68,7 +69,7 @@
     let tcApi;
     let groups = [];
     let selectedGroups = [];
-    let groupColors = {}; // key → hex string
+    let groupColors = {};
     let sortDirection = {};
 
     const debugConsole = document.getElementById('debugConsole');
@@ -111,49 +112,81 @@
       return flat;
     }
 
-    function randomHexColor() {
-      return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+    function randomColor() {
+      return {
+        r: Math.floor(Math.random() * 256),
+        g: Math.floor(Math.random() * 256),
+        b: Math.floor(Math.random() * 256)
+      };
     }
 
     async function colorGroups() {
       debug('Applying random colors to groups...');
       try {
-        await tcApi.viewer.setObjectState([]); // clear all
+        await tcApi.viewer.setObjectState([]);
       } catch (e) {
-        debug('Clear colors failed: ' + e.message);
+        debug('Failed to clear colors: ' + e.message);
       }
 
       groupColors = {};
 
       for (const group of groups) {
         const key = `${group.mark}|${group.diameter}|${group.length}|${group.shape}|${group.modelId}`;
-        const hex = randomHexColor();
-        groupColors[key] = hex;
-        group.colorHex = hex;
+        groupColors[key] = randomColor();
+        group.color = groupColors[key];
 
         try {
           await tcApi.viewer.setObjectState({
             modelId: group.modelId,
             objectIds: group.objectIds,
-            color: hex
+            color: groupColors[key]
           });
-          debug(`Colored group ${group.mark} with ${hex}`);
+          debug(`Colored group ${group.mark}`);
         } catch (e) {
-          debug(`Coloring failed for group ${group.mark}: ${e.message}`);
+          debug('Coloring error for group ' + group.mark + ': ' + e.message);
         }
       }
       renderTable();
-      debug('Coloring complete');
+      debug('Random colors applied');
+    }
+
+    async function testColorAllRed() {
+      debug('Testing coloring all rebar red...');
+      try {
+        await tcApi.viewer.setObjectState([]);
+      } catch (e) {
+        debug('Clear failed: ' + e.message);
+      }
+
+      let allIds = [];
+      let modelId = groups[0]?.modelId || null;
+      groups.forEach(g => allIds = allIds.concat(g.objectIds));
+
+      if (allIds.length === 0) {
+        debug('No objects to color');
+        return;
+      }
+
+      try {
+        await tcApi.viewer.setObjectState({
+          modelId: modelId,
+          objectIds: allIds,
+          color: { r: 255, g: 0, b: 0 }
+        });
+        debug('All rebar colored red');
+      } catch (e) {
+        debug('Test color error: ' + e.message);
+      }
     }
 
     async function clearColors() {
       debug('Clearing colors...');
       groupColors = {};
-      groups.forEach(g => g.colorHex = null);
+      groups.forEach(g => g.color = null);
       try {
         await tcApi.viewer.setObjectState([]);
       } catch (e) {
-        debug('Clear colors failed: ' + e.message);
+        debug('Clear colors error: ' + e.message);
       }
       renderTable();
     }
@@ -189,7 +222,8 @@
       const tbody = document.querySelector('#rebarTable tbody');
       tbody.innerHTML = '';
       groups.forEach(group => {
-        const swatch = `<div class="colorSwatch" style="background-color: ${group.colorHex || '#FFFFFF'};"></div>`;
+        const color = group.color || { r: 255, g: 255, b: 255 };
+        const swatch = `<div class="colorSwatch" style="background-color: rgb(${color.r},${color.g},${color.b});"></div>`;
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -312,7 +346,6 @@
         });
 
         renderTable();
-        await colorGroups();
 
         document.getElementById('selectGroups').disabled = false;
         document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${allRebar.length} bars.`;
@@ -345,6 +378,7 @@
     document.getElementById('refresh').onclick = processRebar;
     document.getElementById('colorGroups').onclick = colorGroups;
     document.getElementById('clearColors').onclick = clearColors;
+    document.getElementById('testColor').onclick = testColorAllRed;
     document.getElementById('selectGroups').onclick = selectSelectedGroups;
 
     init();
