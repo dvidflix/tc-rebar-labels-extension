@@ -31,9 +31,9 @@
 
   <p><strong>Success!</strong> The extension is working. Select rebar bars and click Refresh.</p>
 
-  <label><strong>Label Template</strong> (recommended):</label>
-  <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm ({Rebar mark})</textarea>
-  <p><small>Other useful: {Shape code}, {Name}, {Start Point X}, {Start Point Y}, {End Point X}, {End Point Y}, {Grade}</small></p>
+  <label><strong>Label Template</strong> (default matches your SketchUp example):</label>
+  <textarea id="template" rows="3">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
+  <p><small>Other useful: {Size}, {Length}, {Rebar mark}, {Shape code}, {End Point X}, {End Point Y}, {Grade}</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
   <button id="labelSelected" disabled>Label Selected Group</button>
@@ -63,7 +63,7 @@
     let groups = [];
     let markupIds = [];
     let selectedGroup = null;
-    let sortDirection = {}; // track sort direction per column
+    let sortDirection = {};
 
     async function init() {
       try {
@@ -85,21 +85,25 @@
 
     async function addCallout(anchor, labelPos, text) {
       try {
+        // Black arrow for leader line
         const arrowId = await tcApi.viewer.markup.addArrowMarkup({
           start: labelPos,
           end: anchor,
           color: { r: 0, g: 0, b: 0 },
-          width: 5
+          width: 6
         });
         markupIds.push(arrowId);
 
+        // White background box with black text
         const textId = await tcApi.viewer.markup.addTextMarkup({
           text: text || 'Rebar',
           position: labelPos,
           color: { r: 0, g: 0, b: 0 },
           backgroundColor: { r: 255, g: 255, b: 255, a: 0.95 },
-          fontSize: 40,
-          padding: 10
+          fontSize: 48,
+          padding: 12,
+          borderWidth: 2,
+          borderColor: { r: 0, g: 0, b: 0 }
         });
         markupIds.push(textId);
       } catch (e) {
@@ -125,7 +129,13 @@
         y: (bounds.min.y + bounds.max.y) / 2,
         z: (bounds.min.z + bounds.max.z) / 2
       };
-      const labelPos = { x: anchor.x, y: anchor.y + 2.0, z: anchor.z + 4.0 };
+
+      // Offset the label above and slightly to the side for better visibility
+      const labelPos = { 
+        x: anchor.x + 2.0, 
+        y: anchor.y + 2.0, 
+        z: anchor.z + 5.0 
+      };
 
       await addCallout(anchor, labelPos, text);
     }
@@ -244,7 +254,7 @@
           const endY = flat['End Point Y'] || '';
           const len = Math.round(Number(flat['Length'] || 0));
 
-          const key = `${mark}|${dia}|${len}|${shape}|${item.modelId}`;
+          const key = `${mark}|${dia}|${len}|${shape}|${startX}|${startY}|${item.modelId}`;
 
           if (!groupMap[key]) {
             groupMap[key] = {
@@ -289,10 +299,9 @@
         const col = th.dataset.sort;
         const currentDir = sortDirection[col] || 'asc';
         const newDir = currentDir === 'asc' ? 'desc' : 'asc';
-        sortDirection = {}; // reset others
+        sortDirection = {};
         sortDirection[col] = newDir;
 
-        // Update arrows
         document.querySelectorAll('th').forEach(h => h.className = '');
         th.className = 'sorted-' + newDir;
 
