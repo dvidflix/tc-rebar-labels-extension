@@ -22,7 +22,7 @@
         <img src="background.svg" alt="Color Groups">
       </button>
       <button id="sortButton" title="Sort">
-        Sort
+        <img src="sort.svg" alt="Sort">
       </button>
       <button id="labelSelected" disabled title="Label Selected Group">
         <img src="tag.svg" alt="Label Selected">
@@ -84,7 +84,6 @@
     let groups = [];
     let markupIds = [];
     let selectedGroup = null;
-    let selectedBarIndex = -1; // for child row individual selection
     let groupColors = {};
     let sortColumns = [];
     let expandedGroups = new Set();
@@ -263,10 +262,22 @@
     function sortTable() {
       groups.sort((a, b) => {
         for (const {col, dir} of sortColumns) {
-          let A = a[col] ?? '';
-          let B = b[col] ?? '';
-          if (typeof A === 'number') A = Number(A);
-          if (typeof B === 'number') B = Number(B);
+          let A = a[col];
+          let B = b[col];
+
+          // Convert empty to very large negative number for sorting
+          if (A === '' || A === null) A = -Infinity;
+          if (B === '' || B === null) B = -Infinity;
+
+          A = Number(A);
+          B = Number(B);
+
+          if (isNaN(A)) A = a[col] ?? '';
+          if (isNaN(B)) B = b[col] ?? '';
+
+          if (typeof A === 'string') A = A.toLowerCase();
+          if (typeof B === 'string') B = B.toLowerCase();
+
           if (A !== B) {
             return (A < B ? -1 : 1) * (dir === 'asc' ? 1 : -1);
           }
@@ -291,12 +302,12 @@
             <img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon" alt="Expand">
           </td>
           <td class="center">${group.mark}</td>
-          <td class="numeric">${group.commonStartX || '<span class="empty-cell">--</span>'}</td>
-          <td class="numeric">${group.commonStartY || '<span class="empty-cell">--</span>'}</td>
-          <td class="numeric">${group.commonEndX || '<span class="empty-cell">--</span>'}</td>
-          <td class="numeric">${group.commonEndY || '<span class="empty-cell">--</span>'}</td>
-          <td class="center">${group.diameter || '<span class="empty-cell">--</span>'}</td>
-          <td>${group.shape || '<span class="empty-cell">--</span>'}</td>
+          <td class="numeric">${group.commonStartX || ''}</td>
+          <td class="numeric">${group.commonStartY || ''}</td>
+          <td class="numeric">${group.commonEndX || ''}</td>
+          <td class="numeric">${group.commonEndY || ''}</td>
+          <td class="center">${group.diameter || ''}</td>
+          <td>${group.shape || ''}</td>
           <td class="numeric">${group.length}</td>
           <td class="center">${group.quantity}</td>
         `;
@@ -313,7 +324,6 @@
             tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
             groupTr.classList.add('selected');
             selectedGroup = group;
-            selectedBarIndex = -1;
             document.getElementById('labelSelected').disabled = false;
             selectAndZoomGroup(group);
           }
@@ -322,18 +332,18 @@
 
         // Child rows if expanded
         if (expandedGroups.has(group.key)) {
-          group.individualBars.forEach((bar, index) => {
+          group.individualBars.forEach(bar => {
             const childTr = document.createElement('tr');
             childTr.className = 'child-row';
             childTr.innerHTML = `
               <td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});"></td>
               <td class="center gray-bg">${group.mark}</td>
-              <td class="numeric">${bar.startX || '<span class="empty-cell">--</span>'}</td>
-              <td class="numeric">${bar.startY || '<span class="empty-cell">--</span>'}</td>
-              <td class="numeric">${bar.endX || '<span class="empty-cell">--</span>'}</td>
-              <td class="numeric">${bar.endY || '<span class="empty-cell">--</span>'}</td>
-              <td class="center gray-bg">${group.diameter || '<span class="empty-cell">--</span>'}</td>
-              <td class="gray-bg">${group.shape || '<span class="empty-cell">--</span>'}</td>
+              <td class="numeric">${bar.startX}</td>
+              <td class="numeric">${bar.startY}</td>
+              <td class="numeric">${bar.endX}</td>
+              <td class="numeric">${bar.endY}</td>
+              <td class="center gray-bg">${group.diameter || ''}</td>
+              <td class="gray-bg">${group.shape || ''}</td>
               <td class="numeric gray-bg">${group.length}</td>
               <td class="center gray-bg">${group.quantity}</td>
             `;
@@ -343,9 +353,7 @@
               groupTr.classList.add('selected');
               childTr.classList.add('selected');
               selectedGroup = group;
-              selectedBarIndex = index;
               document.getElementById('labelSelected').disabled = false;
-              // For individual bar selection, we can't select single bar (API limitation), so select whole group
               selectAndZoomGroup(group);
             };
             tbody.appendChild(childTr);
@@ -354,59 +362,11 @@
       });
     }
 
-    // Sort popup
-    const sortPopup = document.getElementById('sortPopup');
-    const sortOptions = document.getElementById('sortOptions');
-
-    document.getElementById('sortButton').onclick = (e) => {
-      e.stopPropagation();
-      sortOptions.innerHTML = '';
-      const columns = ['mark', 'startX', 'startY', 'endX', 'endY', 'diameter', 'shape', 'length', 'quantity'];
-
-      columns.forEach(col => {
-        const li = document.createElement('li');
-        li.textContent = document.querySelector(`th[data-sort="${col}"]`).textContent.trim();
-
-        const existing = sortColumns.find(s => s.col === col);
-        if (existing) {
-          li.innerHTML += existing.dir === 'asc' ? ' ▲' : ' ▼';
-        }
-
-        li.onclick = (e) => {
-          e.stopPropagation();
-          const existingIndex = sortColumns.findIndex(s => s.col === col);
-          if (existingIndex !== -1) {
-            const currentDir = sortColumns[existingIndex].dir;
-            if (currentDir === 'asc') {
-              sortColumns[existingIndex].dir = 'desc';
-            } else {
-              sortColumns.splice(existingIndex, 1);
-            }
-          } else {
-            sortColumns.unshift({ col, dir: 'asc' });
-          }
-          sortTable();
-          sortPopup.style.display = 'none';
-        };
-        sortOptions.appendChild(li);
-      });
-
-      const rect = document.getElementById('sortButton').getBoundingClientRect();
-      sortPopup.style.top = rect.bottom + 'px';
-      sortPopup.style.right = (window.innerWidth - rect.right) + 'px';
-      sortPopup.style.display = 'block';
-    };
-
-    document.addEventListener('click', () => {
-      sortPopup.style.display = 'none';
-    });
-
     async function processRebar() {
       debug('=== REFRESH STARTED ===');
       await clearMarkups();
       groups = [];
       selectedGroup = null;
-      selectedBarIndex = -1;
       expandedGroups = new Set();
       document.getElementById('labelSelected').disabled = true;
       document.getElementById('labelAll').disabled = true;
@@ -498,9 +458,7 @@
           g.commonEndY = endsY.size === 1 ? g.individualBars[0].endY : '';
         });
 
-        sortTable();
-
-        await colorGroups();
+        renderTable();
 
         document.getElementById('labelAll').disabled = false;
         document.getElementById('clear').disabled = false;
@@ -516,30 +474,51 @@
       debug('=== REFRESH ENDED ===');
     }
 
-    document.querySelectorAll('th[data-sort]').forEach(th => {
-      th.onclick = () => {
-        const col = th.dataset.sort;
-        const existing = sortColumns.findIndex(s => s.col === col);
+    // Sort popup
+    const sortPopup = document.getElementById('sortPopup');
+    const sortOptions = document.getElementById('sortOptions');
 
-        if (existing !== -1) {
-          const currentDir = sortColumns[existing].dir;
-          if (currentDir === 'asc') {
-            sortColumns[existing].dir = 'desc';
-          } else {
-            sortColumns.splice(existing, 1);
-          }
-        } else {
-          sortColumns.unshift({ col, dir: 'asc' });
+    document.getElementById('sortButton').onclick = (e) => {
+      e.stopPropagation();
+      sortOptions.innerHTML = '';
+      const columns = ['mark', 'startX', 'startY', 'endX', 'endY', 'diameter', 'shape', 'length', 'quantity'];
+
+      columns.forEach(col => {
+        const li = document.createElement('li');
+        li.textContent = document.querySelector(`th[data-sort="${col}"]`).textContent.trim();
+
+        const existing = sortColumns.find(s => s.col === col);
+        if (existing) {
+          li.textContent += existing.dir === 'asc' ? ' ▲' : ' ▼';
         }
 
-        document.querySelectorAll('th').forEach(h => h.className = '');
-        sortColumns.forEach(s => {
-          const header = document.querySelector(`th[data-sort="${s.col}"]`);
-          if (header) header.className = 'sorted-' + s.dir;
-        });
+        li.onclick = (e) => {
+          e.stopPropagation();
+          const existingIndex = sortColumns.findIndex(s => s.col === col);
+          if (existingIndex !== -1) {
+            const currentDir = sortColumns[existingIndex].dir;
+            if (currentDir === 'asc') {
+              sortColumns[existingIndex].dir = 'desc';
+            } else {
+              sortColumns.splice(existingIndex, 1);
+            }
+          } else {
+            sortColumns.unshift({ col, dir: 'asc' });
+          }
+          sortTable();
+          sortPopup.style.display = 'none';
+        };
+        sortOptions.appendChild(li);
+      });
 
-        sortTable();
-      };
+      const rect = document.getElementById('sortButton').getBoundingClientRect();
+      sortPopup.style.top = rect.bottom + 'px';
+      sortPopup.style.right = (window.innerWidth - rect.right) + 'px';
+      sortPopup.style.display = 'block';
+    };
+
+    document.addEventListener('click', () => {
+      sortPopup.style.display = 'none';
     });
 
     document.getElementById('refresh').onclick = processRebar;

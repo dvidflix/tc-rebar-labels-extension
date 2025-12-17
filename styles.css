@@ -56,7 +56,8 @@ body {
   border: 1px solid #ddd;
   box-shadow: 0 4px 8px rgba(0,0,0,0.1);
   z-index: 1000;
-  min-width: 160px;
+  min-width: 180px;
+  right: 20px;
 }
 
 .sort-popup-content {
@@ -140,6 +141,11 @@ tr.child-row.selected { background: #d0e4ff !important; }
   color: #666;
 }
 
+/* Empty cells - light gray background */
+td:empty {
+  background: #e0e1e9;
+}
+
 /* Alignment */
 .numeric { text-align: right; }
 .center { text-align: center; }
@@ -149,12 +155,6 @@ tr.child-row.selected { background: #d0e4ff !important; }
   width: 16px;
   height: 16px;
   vertical-align: middle;
-}
-
-/* Empty cells */
-.empty-cell {
-  color: #999;
-  font-style: italic;
 }
 
 /* Footer */
