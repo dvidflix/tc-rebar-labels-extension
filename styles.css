@@ -26,7 +26,6 @@ body {
   margin-bottom: 8px;
 }
 
-/* Views Selector - clean, no "Views" label */
 .views-selector-container {
   position: relative;
   margin-top: 4px;
@@ -94,7 +93,7 @@ body {
   opacity: 1;
 }
 
-/* Advanced Sort Popup */
+/* Sort Popup */
 .sort-popup {
   display: none;
   position: absolute;

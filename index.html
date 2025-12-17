@@ -12,7 +12,6 @@
   <div class="header">
     <div class="header-left">
       <div class="header-title">Rebar Labels</div>
-      <!-- Clean Views selector without "Views" label -->
       <div class="views-selector-container">
         <button id="viewsDropdown" class="views-dropdown-button">
           <span id="viewsText">Selected objects</span>
@@ -107,6 +106,7 @@
     let expandedGroups = new Set();
     let coloringActive = false;
     let currentViewMode = 'selected';
+    let lastSelectedRow = null; // For Shift selection
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -251,17 +251,14 @@
       if (selectedGroups.size > 0) await selectAndZoomGroup([...selectedGroups][0]);
     }
 
-    // Fixed sorting for all columns including endpoints
     function sortTable() {
       groups.sort((a, b) => {
         for (const {col, dir} of sortColumns) {
           let A = a[col] ?? '';
           let B = b[col] ?? '';
-
           if (col === 'shape') {
             if (A !== B) return A.localeCompare(B) * (dir === 'asc' ? 1 : -1);
           } else {
-            // Treat empty or '--' as -Infinity for numeric sort
             const numA = (A === '' || A === '--') ? -Infinity : parseFloat(A);
             const numB = (B === '' || B === '--') ? -Infinity : parseFloat(B);
             if (numA !== numB) return (numA < numB ? -1 : 1) * (dir === 'asc' ? 1 : -1);
@@ -298,7 +295,6 @@
         const groupTr = document.createElement('tr');
         groupTr.className = 'group-row' + (isSelected ? ' selected' : '');
         groupTr.dataset.groupKey = group.key;
-        groupTr.dataset.groupIndex = groups.indexOf(group);
         groupTr.innerHTML = `
           <td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});">
             <img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon">
@@ -361,9 +357,7 @@
       updateLabelButtonState();
     }
 
-    // Fixed multi-selection with Ctrl + Shift
-    let lastClickedIndex = -1;
-
+    // Perfect multi-selection using old proven logic
     function handleRowClick(e, group, rowElement) {
       if (e.target.classList.contains('expand-icon') || e.target.closest('.expand-icon')) {
         e.stopPropagation();
@@ -372,41 +366,56 @@
         return;
       }
 
-      const currentIndex = groups.indexOf(group);
-      const isCtrl = e.ctrlKey || e.metaKey;
-      const isShift = e.shiftKey;
+      const groupRows = Array.from(document.querySelectorAll('tr.group-row'));
 
-      if (isShift && lastClickedIndex !== -1) {
-        const start = Math.min(lastClickedIndex, currentIndex);
-        const end = Math.max(lastClickedIndex, currentIndex);
-        selectedGroups.clear();
+      if (e.shiftKey && lastSelectedRow) {
+        const currentIndex = groupRows.indexOf(rowElement);
+        const lastIndex = groupRows.indexOf(lastSelectedRow);
+        const start = Math.min(currentIndex, lastIndex);
+        const end = Math.max(currentIndex, lastIndex);
+
+        // Clear all
+        groupRows.forEach(r => r.classList.remove('selected'));
+        document.querySelectorAll('tr.child-row').forEach(r => r.classList.remove('selected'));
+
+        // Select range
         for (let i = start; i <= end; i++) {
-          selectedGroups.add(groups[i]);
+          const tr = groupRows[i];
+          tr.classList.add('selected');
+          const gKey = tr.dataset.groupKey;
+          document.querySelectorAll(`tr.child-row[data-group-key="${gKey}"]`).forEach(c => c.classList.add('selected'));
         }
-      } else if (isCtrl) {
-        if (selectedGroups.has(group)) {
-          selectedGroups.delete(group);
-        } else {
-          selectedGroups.add(group);
-        }
-        lastClickedIndex = currentIndex;
+      } else if (e.ctrlKey || e.metaKey) {
+        rowElement.classList.toggle('selected');
+        const gKey = rowElement.dataset.groupKey;
+        const isNowSelected = rowElement.classList.contains('selected');
+        document.querySelectorAll(`tr.child-row[data-group-key="${gKey}"]`).forEach(c => {
+          if (isNowSelected) c.classList.add('selected');
+          else c.classList.remove('selected');
+        });
       } else {
-        selectedGroups.clear();
-        selectedGroups.add(group);
-        lastClickedIndex = currentIndex;
+        // Single selection
+        document.querySelectorAll('#rebarTable tbody tr').forEach(tr => tr.classList.remove('selected'));
+        rowElement.classList.add('selected');
+        const gKey = rowElement.dataset.groupKey;
+        document.querySelectorAll(`tr.child-row[data-group-key="${gKey}"]`).forEach(c => c.classList.add('selected'));
       }
 
-      // Update visual selection
-      document.querySelectorAll('tr').forEach(tr => {
+      // Update lastSelectedRow for next Shift click
+      if (rowElement.classList.contains('group-row') && rowElement.classList.contains('selected')) {
+        lastSelectedRow = rowElement;
+      }
+
+      // Rebuild selectedGroups from DOM
+      selectedGroups.clear();
+      document.querySelectorAll('tr.group-row.selected').forEach(tr => {
         const gKey = tr.dataset.groupKey;
-        if (gKey) {
-          const grp = groups.find(g => g.key === gKey);
-          if (grp) tr.classList.toggle('selected', selectedGroups.has(grp));
-        }
+        const grp = groups.find(g => g.key === gKey);
+        if (grp) selectedGroups.add(grp);
       });
 
       updateLabelButtonState();
-      if (selectedGroups.size === 1) selectAndZoomGroup(group);
+      if (selectedGroups.size === 1) selectAndZoomGroup([...selectedGroups][0]);
     }
 
     function updateLabelButtonState() {
@@ -420,6 +429,7 @@
       await clearMarkups();
       groups = [];
       selectedGroups.clear();
+      lastSelectedRow = null;
       expandedGroups = new Set();
       updateLabelButtonState();
 
@@ -510,7 +520,7 @@
       return props.properties?.some(p => p.name === 'Tekla Reinforcement - Bending List' || p.name === 'ICOS Rebar');
     }
 
-    // Sort popup — fixed mouse clicks
+    // Sort popup (unchanged — already fixed for mouse interaction)
     const sortPopup = document.getElementById('sortPopup');
     const sortLevels = document.getElementById('sortLevels');
     const addSortBtn = document.getElementById('addSort');
@@ -534,9 +544,7 @@
         </select>
       `;
       level.querySelector('.remove-sort').onclick = (e) => { e.stopPropagation(); level.remove(); updateSortColumns(); };
-      level.querySelectorAll('select').forEach(sel => {
-        sel.onchange = (e) => { e.stopPropagation(); updateSortColumns(); };
-      });
+      level.querySelectorAll('select').forEach(sel => sel.onchange = (e) => { e.stopPropagation(); updateSortColumns(); });
       return level;
     }
 
@@ -573,7 +581,6 @@
     };
 
     sortPopup.addEventListener('click', (e) => e.stopPropagation());
-
     document.addEventListener('click', () => { sortPopup.style.display = 'none'; });
 
     document.getElementById('refresh').onclick = processRebar;
