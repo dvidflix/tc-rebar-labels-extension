@@ -29,8 +29,8 @@
   <table id="rebarTable">
     <thead>
       <tr>
-        <th></th> <!-- Expand/Collapse -->
-        <th></th> <!-- Color swatch -->
+        <th></th> <!-- Expand -->
+        <th></th> <!-- Color -->
         <th data-sort="mark">Mark</th>
         <th data-sort="diameter">Diam.</th>
         <th data-sort="shape">Shape code</th>
@@ -62,10 +62,11 @@
   <script>
     let tcApi;
     let groups = [];
+    let markupIds = [];
     let selectedGroups = [];
     let groupColors = {};
     let sortColumns = [{ col: 'startX', dir: 'asc' }, { col: 'startY', dir: 'asc' }];
-    let expandedGroups = new Set(); // track expanded group keys
+    let expandedGroups = new Set();
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -82,7 +83,6 @@
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
         debug('Connected successfully');
         document.getElementById('status').textContent = '';
-        document.getElementById('status').classList.remove('good', 'error');
       } catch (err) {
         debug('Connection error: ' + err.message);
       }
@@ -159,7 +159,6 @@
           pset.properties.forEach(prop => {
             if (prop.value !== undefined) {
               flat[prop.name] = prop.value;
-              flat[pset.name + ' ' + prop.name] = prop.value;
             }
           });
         }
@@ -254,30 +253,27 @@
         const groupTr = document.createElement('tr');
         groupTr.className = 'group-row';
         groupTr.innerHTML = `
-          <td><span class="expand-icon">▶</span></td>
+          <td><span class="expand-icon">${expandedGroups.has(group.key) ? '▼' : '▶'}</span></td>
           <td>${swatch}</td>
           <td>${group.mark}</td>
           <td>${group.diameter}</td>
           <td>${group.shape}</td>
-          <td>${group.startX}</td>
-          <td>${group.startY}</td>
-          <td>${group.endX}</td>
-          <td>${group.endY}</td>
+          <td>${group.commonStartX || ''}</td>
+          <td>${group.commonStartY || ''}</td>
+          <td>${group.commonEndX || ''}</td>
+          <td>${group.commonEndY || ''}</td>
           <td>${group.length}</td>
           <td>${group.quantity}</td>
         `;
         groupTr.onclick = (e) => {
           if (e.target.classList.contains('expand-icon')) {
             e.stopPropagation();
-            const isExpanded = expandedGroups.has(group.key);
-            if (isExpanded) {
+            if (expandedGroups.has(group.key)) {
               expandedGroups.delete(group.key);
-              groupTr.querySelector('.expand-icon').textContent = '▶';
             } else {
               expandedGroups.add(group.key);
-              groupTr.querySelector('.expand-icon').textContent = '▼';
             }
-            renderTable(); // re-render to show/hide child rows
+            renderTable();
           } else {
             tbody.querySelectorAll('tr.group-row').forEach(r => r.classList.remove('selected'));
             groupTr.classList.add('selected');
@@ -289,12 +285,12 @@
         };
         tbody.appendChild(groupTr);
 
-        // Child rows (individual bars) if expanded
+        // Child rows if expanded
         if (expandedGroups.has(group.key)) {
           group.individualBars.forEach(bar => {
-            const barTr = document.createElement('tr');
-            barTr.className = 'child-row';
-            barTr.innerHTML = `
+            const childTr = document.createElement('tr');
+            childTr.className = 'child-row';
+            childTr.innerHTML = `
               <td></td>
               <td></td>
               <td></td>
@@ -307,7 +303,7 @@
               <td></td>
               <td></td>
             `;
-            tbody.appendChild(barTr);
+            tbody.appendChild(childTr);
           });
         }
       });
@@ -358,7 +354,6 @@
 
         if (allRebar.length === 0) throw new Error('No rebar elements found.');
 
-        // Group by common properties, keep individual end points
         const groupMap = {};
         for (const item of allRebar) {
           const flat = flattenProps(item.props);
@@ -377,10 +372,10 @@
               diameter: dia,
               shape,
               length,
-              startX: flat['Start Point X'] || '',
-              startY: flat['Start Point Y'] || '',
-              endX: flat['End Point X'] || '',
-              endY: flat['End Point Y'] || '',
+              commonStartX: flat['Start Point X'] || '',
+              commonStartY: flat['Start Point Y'] || '',
+              commonEndX: flat['End Point X'] || '',
+              commonEndY: flat['End Point Y'] || '',
               objectIds: [],
               sampleProps: item.props,
               modelId: item.modelId,
@@ -390,7 +385,6 @@
 
           groupMap[key].objectIds.push(item.id);
 
-          // Store individual bar end points
           groupMap[key].individualBars.push({
             startX: flat['Start Point X'] || '',
             startY: flat['Start Point Y'] || '',
