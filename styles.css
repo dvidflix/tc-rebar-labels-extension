@@ -9,7 +9,7 @@ body {
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   background: #fff;
   color: #000;
   padding: 12px 20px;
@@ -18,14 +18,15 @@ body {
   border-bottom: 1px solid #ddd;
 }
 
-.header-title {
+.header-left {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
 }
 
-.title-icon {
-  height: 24px;
+.header-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 
 .header-actions button {
@@ -48,72 +49,64 @@ body {
   height: 20px;
 }
 
-/* Dropdown: View content for */
-.dropdown-container {
+/* Views Dropdown - matching the screenshot */
+.views-dropdown-container {
   position: relative;
   display: inline-block;
-  margin-left: 20px;
 }
 
-.dropdown-button {
-  background: #fff;
-  border: 1px solid #ccc;
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 14px;
+.views-dropdown-button {
+  background: transparent;
+  border: none;
+  padding: 8px 24px 8px 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #000;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 180px;
-  justify-content: space-between;
+  text-align: left;
+  min-width: 220px;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"><path fill="%23333" d="M7 10l5 5 5-5z"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 12px center;
 }
 
-.dropdown-button::after {
-  content: "▼";
-  font-size: 10px;
+.views-dropdown-button:hover,
+.views-dropdown-button:focus {
+  background-color: #ff0; /* Yellow highlight as in screenshot */
+  outline: none;
 }
 
-.dropdown-menu {
+.views-dropdown-menu {
   display: none;
   position: absolute;
   top: 100%;
   left: 0;
   background: white;
-  border: 1px solid #ddd;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  border: 1px solid #ccc;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   min-width: 100%;
   z-index: 1000;
   border-radius: 4px;
   overflow: hidden;
 }
 
-.dropdown-menu.show {
+.views-dropdown-menu.show {
   display: block;
 }
 
-.dropdown-item {
-  padding: 8px 12px;
-  font-size: 14px;
+.views-item {
+  padding: 10px 16px;
+  font-size: 15px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 
-.dropdown-item:hover {
+.views-item:hover {
   background: #f0f0f0;
 }
 
-.dropdown-item.selected {
+.views-item.selected {
   background: #e6f0ff;
   font-weight: 600;
-}
-
-.dropdown-item.selected::after {
-  content: "✓";
-  color: #0066cc;
-  font-weight: bold;
 }
 
 /* Sort Popup */
@@ -154,7 +147,7 @@ body {
   background: #f0f0f0;
 }
 
-/* Table */
+/* Table (unchanged) */
 table {
   width: 100%;
   border-collapse: collapse;

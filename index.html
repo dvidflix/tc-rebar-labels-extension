@@ -10,18 +10,17 @@
 </head>
 <body>
   <div class="header">
-    <div class="header-title">
-      <img src="markup-text-active.svg" alt="Icon" class="title-icon">
-      Rebar Labels
-      <!-- New Dropdown: View content for -->
-      <div class="dropdown-container">
-        <button id="viewContentDropdown" class="dropdown-button">
-          Visible objects
+    <div class="header-left">
+      <div class="header-title">Rebar Labels</div>
+      <!-- Dropdown below the title, matching the screenshot style -->
+      <div class="views-dropdown-container">
+        <button id="viewsDropdown" class="views-dropdown-button">
+          All views in project
         </button>
-        <div id="viewContentMenu" class="dropdown-menu">
-          <div class="dropdown-item" data-value="all">All objects</div>
-          <div class="dropdown-item" data-value="selected">Selected objects</div>
-          <div class="dropdown-item selected" data-value="visible">Visible objects</div>
+        <div id="viewsMenu" class="views-dropdown-menu">
+          <div class="views-item selected" data-value="all">All views in project</div>
+          <div class="views-item" data-value="selected">Selected objects</div>
+          <div class="views-item" data-value="visible">Visible objects</div>
         </div>
       </div>
     </div>
@@ -91,41 +90,6 @@
   <pre id="debugConsole">Debug messages will appear here...</pre>
 
   <script>
-    // Dropdown functionality
-    const dropdownBtn = document.getElementById('viewContentDropdown');
-    const dropdownMenu = document.getElementById('viewContentMenu');
-
-    dropdownBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      dropdownMenu.classList.toggle('show');
-    });
-
-    document.querySelectorAll('#viewContentMenu .dropdown-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-
-        // Update selected item
-        document.querySelectorAll('#viewContentMenu .dropdown-item').forEach(i => i.classList.remove('selected'));
-        item.classList.add('selected');
-
-        // Update button text
-        dropdownBtn.textContent = item.textContent.trim();
-
-        // You can use this value later for filtering logic
-        const value = item.getAttribute('data-value');
-        console.log('View mode changed to:', value);
-        // e.g., window.currentViewMode = value;
-
-        dropdownMenu.classList.remove('show');
-      });
-    });
-
-    // Close dropdown when clicking elsewhere
-    document.addEventListener('click', () => {
-      dropdownMenu.classList.remove('show');
-    });
-
-    // Main application script
     let tcApi;
     let groups = [];
     let markupIds = [];
@@ -134,6 +98,7 @@
     let sortColumns = [];
     let expandedGroups = new Set();
     let coloringActive = false;
+    let currentViewMode = 'all'; // Default: All views in project
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -143,6 +108,34 @@
       debugConsole.scrollTop = debugConsole.scrollHeight;
       console.log('DEBUG:', msg);
     }
+
+    // Views Dropdown Functionality
+    const viewsBtn = document.getElementById('viewsDropdown');
+    const viewsMenu = document.getElementById('viewsMenu');
+
+    viewsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      viewsMenu.classList.toggle('show');
+    });
+
+    document.querySelectorAll('#viewsMenu .views-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+
+        document.querySelectorAll('#viewsMenu .views-item').forEach(i => i.classList.remove('selected'));
+        item.classList.add('selected');
+
+        viewsBtn.textContent = item.textContent.trim();
+        currentViewMode = item.getAttribute('data-value');
+
+        console.log('View mode changed to:', currentViewMode);
+        viewsMenu.classList.remove('show');
+      });
+    });
+
+    document.addEventListener('click', () => {
+      viewsMenu.classList.remove('show');
+    });
 
     async function init() {
       debug('Initializing extension...');
@@ -412,38 +405,55 @@
       tbody.innerHTML = '<tr><td colspan="10">Processing...</td></tr>';
 
       try {
-        debug('Fetching selection...');
-        const selection = await tcApi.viewer.getSelection();
-        debug(`Selection retrieved: ${selection.length} items`);
+        let objects = [];
 
-        if (selection.length === 0) throw new Error('No objects selected.');
+        if (currentViewMode === 'selected') {
+          // Original behavior: use current selection
+          debug('Mode: Selected objects');
+          const selection = await tcApi.viewer.getSelection();
+          debug(`Selection retrieved: ${selection.length} items`);
+          if (selection.length === 0) throw new Error('No objects selected.');
 
-        let allRebar = [];
-        for (const sel of selection) {
-          const modelId = sel.modelId;
-          const runtimeIds = sel.objectRuntimeIds || [];
-          if (!modelId || runtimeIds.length === 0) continue;
+          for (const sel of selection) {
+            const modelId = sel.modelId;
+            const runtimeIds = sel.objectRuntimeIds || [];
+            if (!modelId || runtimeIds.length === 0) continue;
+            const propsArray = await tcApi.viewer.getObjectProperties(modelId, runtimeIds);
+            propsArray.forEach((props, i) => {
+              if (hasRebarProps(props)) {
+                objects.push({ id: runtimeIds[i], props, modelId });
+              }
+            });
+          }
 
-          const propsArray = await tcApi.viewer.getObjectProperties(modelId, runtimeIds);
-          propsArray.forEach((props, i) => {
-            const hasRebar = props.properties?.some(p => 
-              p.name === 'Tekla Reinforcement - Bending List' || 
-              p.name === 'ICOS Rebar'
-            );
-            if (hasRebar) {
-              allRebar.push({
-                id: runtimeIds[i],
-                props: props,
-                modelId: modelId
-              });
-            }
-          });
+        } else {
+          // All or Visible: get objects using getObjects with optional visibility filter
+          const objectState = currentViewMode === 'visible' 
+            ? { visibility: 'visible' } 
+            : undefined;
+
+          debug(`Mode: ${currentViewMode === 'all' ? 'All views in project' : 'Visible objects'}`);
+          const result = await tcApi.viewer.getObjects({ objectState });
+
+          for (const item of result) {
+            const modelId = item.modelId;
+            const runtimeIds = item.objectRuntimeIds || [];
+            if (runtimeIds.length === 0) continue;
+
+            const propsArray = await tcApi.viewer.getObjectProperties(modelId, runtimeIds);
+            propsArray.forEach((props, i) => {
+              if (hasRebarProps(props)) {
+                objects.push({ id: runtimeIds[i], props, modelId });
+              }
+            });
+          }
         }
 
-        if (allRebar.length === 0) throw new Error('No rebar elements found.');
+        if (objects.length === 0) throw new Error('No rebar elements found.');
 
+        // Grouping logic (same as before)
         const groupMap = {};
-        for (const item of allRebar) {
+        for (const item of objects) {
           const flat = flattenProps(item.props);
 
           const mark = flat['Serial number'] || flat['Rebar mark'] || flat['Group position number'] || 'Unknown';
@@ -498,7 +508,7 @@
 
         document.getElementById('labelAll').disabled = false;
         document.getElementById('clear').disabled = false;
-        document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${allRebar.length} bars.`;
+        document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${objects.length} bars.`;
         document.getElementById('status').classList.add('good');
         debug('Refresh completed');
       } catch (err) {
@@ -510,7 +520,14 @@
       debug('=== REFRESH ENDED ===');
     }
 
-    // Sort popup
+    function hasRebarProps(props) {
+      return props.properties?.some(p => 
+        p.name === 'Tekla Reinforcement - Bending List' || 
+        p.name === 'ICOS Rebar'
+      );
+    }
+
+    // Sort popup (unchanged)
     const sortPopup = document.getElementById('sortPopup');
     const sortOptions = document.getElementById('sortOptions');
 
