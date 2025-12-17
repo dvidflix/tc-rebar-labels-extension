@@ -73,7 +73,7 @@
     let tcApi;
     let groups = [];
     let markupIds = [];
-    let selectedGroups = [];
+    let selectedGroup = null; // now single group (since child = group)
     let groupColors = {};
     let sortColumns = [
       { col: 'startX', dir: 'asc' },
@@ -151,11 +151,9 @@
     }
 
     async function labelSelectedGroups() {
-      if (selectedGroups.length === 0) return;
+      if (!selectedGroup) return;
       await clearMarkups();
-      for (const group of selectedGroups) {
-        await addLabel(group);
-      }
+      await addLabel(selectedGroup);
     }
 
     async function labelAllGroups() {
@@ -224,13 +222,11 @@
       renderTable();
     }
 
-    async function selectAndZoomGroups() {
-      if (selectedGroups.length === 0) return;
-
-      const modelObjectIds = selectedGroups.map(g => ({
-        modelId: g.modelId,
-        objectRuntimeIds: g.objectIds
-      }));
+    async function selectAndZoomGroup(group) {
+      const modelObjectIds = [{
+        modelId: group.modelId,
+        objectRuntimeIds: group.objectIds
+      }];
 
       try {
         await tcApi.viewer.setSelection({ modelObjectIds }, "set");
@@ -245,8 +241,8 @@
         for (const {col, dir} of sortColumns) {
           let A = a[col] ?? '';
           let B = b[col] ?? '';
-          if (typeof A === 'string') A = A.toLowerCase();
-          if (typeof B === 'string') B = B.toLowerCase();
+          if (typeof A === 'number') A = Number(A);
+          if (typeof B === 'number') B = Number(B);
           if (A !== B) {
             return (A < B ? -1 : 1) * (dir === 'asc' ? 1 : -1);
           }
@@ -266,18 +262,19 @@
         // Group row
         const groupTr = document.createElement('tr');
         groupTr.className = 'group-row';
-        groupTr.style.backgroundColor = `rgb(${color.r},${color.g},${color.b})`;
         groupTr.innerHTML = `
-          <td><img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon" alt="Expand"></td>
+          <td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});">
+            <img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon" alt="Expand">
+          </td>
           <td>${group.mark}</td>
-          <td>${group.commonStartX || '<span class="empty-cell">--</span>'}</td>
-          <td>${group.commonStartY || '<span class="empty-cell">--</span>'}</td>
-          <td>${group.commonEndX || '<span class="empty-cell">--</span>'}</td>
-          <td>${group.commonEndY || '<span class="empty-cell">--</span>'}</td>
-          <td>${group.diameter || '<span class="empty-cell">--</span>'}</td>
-          <td>${group.shape || '<span class="empty-cell">--</span>'}</td>
-          <td>${group.length}</td>
-          <td>${group.quantity}</td>
+          <td class="numeric">${group.commonStartX || '--'}</td>
+          <td class="numeric">${group.commonStartY || '--'}</td>
+          <td class="numeric">${group.commonEndX || '--'}</td>
+          <td class="numeric">${group.commonEndY || '--'}</td>
+          <td class="center">${group.diameter || '--'}</td>
+          <td>${group.shape || '--'}</td>
+          <td class="numeric">${group.length}</td>
+          <td class="center">${group.quantity}</td>
         `;
         groupTr.onclick = (e) => {
           if (e.target.classList.contains('expand-icon') || e.target.tagName === 'IMG') {
@@ -291,9 +288,9 @@
           } else {
             tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
             groupTr.classList.add('selected');
-            selectedGroups = [group];
+            selectedGroup = group;
             document.getElementById('labelSelected').disabled = false;
-            selectAndZoomGroups();
+            selectAndZoomGroup(group);
           }
         };
         tbody.appendChild(groupTr);
@@ -304,25 +301,25 @@
             const childTr = document.createElement('tr');
             childTr.className = 'child-row';
             childTr.innerHTML = `
-              <td></td>
-              <td></td>
-              <td>${bar.startX || '<span class="empty-cell">--</span>'}</td>
-              <td>${bar.startY || '<span class="empty-cell">--</span>'}</td>
-              <td>${bar.endX || '<span class="empty-cell">--</span>'}</td>
-              <td>${bar.endY || '<span class="empty-cell">--</span>'}</td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td></td>
+              <td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});"></td>
+              <td class="gray-bg">${group.mark}</td>
+              <td class="numeric">${bar.startX || '--'}</td>
+              <td class="numeric">${bar.startY || '--'}</td>
+              <td class="numeric">${bar.endX || '--'}</td>
+              <td class="numeric">${bar.endY || '--'}</td>
+              <td class="center gray-bg">${group.diameter || '--'}</td>
+              <td class="gray-bg">${group.shape || '--'}</td>
+              <td class="numeric gray-bg">${group.length}</td>
+              <td class="center gray-bg">${group.quantity}</td>
             `;
             childTr.onclick = (e) => {
               e.stopPropagation();
               tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
               groupTr.classList.add('selected');
               childTr.classList.add('selected');
-              selectedGroups = [group];
+              selectedGroup = group;
               document.getElementById('labelSelected').disabled = false;
-              selectAndZoomGroups();
+              selectAndZoomGroup(group);
             };
             tbody.appendChild(childTr);
           });
@@ -334,7 +331,7 @@
       debug('=== REFRESH STARTED ===');
       await clearMarkups();
       groups = [];
-      selectedGroups = [];
+      selectedGroup = null;
       expandedGroups = new Set();
       document.getElementById('labelSelected').disabled = true;
       document.getElementById('labelAll').disabled = true;
