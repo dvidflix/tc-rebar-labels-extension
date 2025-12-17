@@ -13,23 +13,28 @@
     <div class="header-title">Rebar Labels Extension</div>
     <div class="header-actions">
       <button id="refresh" title="Refresh Rebar Data">
-        <img src="https://modus-icons.trimble.com/connect/autorenew/" alt="Refresh">
+        <img src="update.svg" alt="Refresh">
       </button>
       <button id="colorGroups" title="Color Groups (Random)">
-        <img src="https://modus-icons.trimble.com/connect/background/" alt="Color Groups">
+        <img src="background.svg" alt="Color Groups">
       </button>
     </div>
   </div>
 
   <div class="actions">
     <button id="clearColors">Clear Colors</button>
-    <button id="selectGroups" disabled>Select & Zoom Selected Groups</button>
     <button id="labelSelected" disabled>
-      <img src="https://modus-icons.trimble.com/connect/markup-text-active/" alt="Label">
+      <img src="tag.svg" alt="Label">
       Label Selected Groups
     </button>
-    <button id="labelAll" disabled>Label All Groups</button>
-    <button id="clear" disabled>Clear Labels</button>
+    <button id="labelAll" disabled>
+      <img src="tag_solid.svg" alt="Label All">
+      Label All Groups
+    </button>
+    <button id="clear" disabled>
+      <img src="tag_solid-disabled.svg" alt="Clear Labels">
+      Clear Labels
+    </button>
   </div>
 
   <table id="rebarTable">
@@ -100,6 +105,7 @@
     }
 
     async function clearMarkups() {
+      debug('Clearing markups...');
       for (const id of markupIds) {
         try {
           await tcApi.viewer.markup.removeMarkup(id);
@@ -264,7 +270,7 @@
         const groupTr = document.createElement('tr');
         groupTr.className = 'group-row';
         groupTr.innerHTML = `
-          <td><span class="expand-icon">${expandedGroups.has(group.key) ? '▼' : '>'}</span></td>
+          <td><img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon" alt="Expand"></td>
           <td>${swatch}</td>
           <td>${group.mark}</td>
           <td>${group.commonStartX || '<span class="empty-cell">--</span>'}</td>
@@ -277,7 +283,7 @@
           <td>${group.quantity}</td>
         `;
         groupTr.onclick = (e) => {
-          if (e.target.classList.contains('expand-icon')) {
+          if (e.target.classList.contains('expand-icon') || e.target.tagName === 'IMG') {
             e.stopPropagation();
             if (expandedGroups.has(group.key)) {
               expandedGroups.delete(group.key);
@@ -289,7 +295,6 @@
             tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
             groupTr.classList.add('selected');
             selectedGroups = [group];
-            document.getElementById('selectGroups').disabled = false;
             document.getElementById('labelSelected').disabled = false;
             selectSelectedGroups();
           }
@@ -320,7 +325,6 @@
               groupTr.classList.add('selected');
               childTr.classList.add('selected');
               selectedGroups = [group];
-              document.getElementById('selectGroups').disabled = false;
               document.getElementById('labelSelected').disabled = false;
               selectSelectedGroups();
             };
@@ -336,7 +340,6 @@
       groups = [];
       selectedGroups = [];
       expandedGroups = new Set();
-      document.getElementById('selectGroups').disabled = true;
       document.getElementById('labelSelected').disabled = true;
       document.getElementById('labelAll').disabled = true;
       document.getElementById('clear').disabled = true;
@@ -461,7 +464,9 @@
         document.querySelectorAll('th').forEach(h => h.className = '');
         sortColumns.forEach(s => {
           const header = document.querySelector(`th[data-sort="${s.col}"]`);
-          if (header) header.className = 'sorted-' + s.dir;
+          if (header) {
+            header.innerHTML = header.innerHTML.replace(/ (▲|▼)$/, '') + (s.dir === 'asc' ? ' ▲' : ' ▼');
+          }
         });
 
         sortTable();
@@ -471,7 +476,6 @@
     document.getElementById('refresh').onclick = processRebar;
     document.getElementById('colorGroups').onclick = colorGroups;
     document.getElementById('clearColors').onclick = clearColors;
-    document.getElementById('selectGroups').onclick = selectSelectedGroups;
     document.getElementById('labelSelected').onclick = labelSelectedGroups;
     document.getElementById('labelAll').onclick = labelAllGroups;
     document.getElementById('clear').onclick = clearMarkups;
