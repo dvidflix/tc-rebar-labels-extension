@@ -10,31 +10,34 @@
 </head>
 <body>
   <div class="header">
-    <div class="header-title">Rebar Labels</div>
+    <div class="header-title">
+      <img src="markup-text-active.svg" alt="Icon" class="title-icon">
+      Rebar Labels
+    </div>
     <div class="header-actions">
       <button id="refresh" title="Refresh Rebar Data">
         <img src="update.svg" alt="Refresh">
       </button>
-      <button id="colorGroups" title="Color Groups (Random)">
+      <button id="colorGroups" class="toggle-button" title="Color Groups (Random)">
         <img src="background.svg" alt="Color Groups">
+      </button>
+      <button id="labelSelected" disabled title="Label Selected Group">
+        <img src="tag.svg" alt="Label Selected">
+      </button>
+      <button id="labelAll" disabled title="Label All Groups">
+        <img src="tag_solid.svg" alt="Label All">
+      </button>
+      <button id="clear" disabled title="Clear Labels">
+        <img src="tag_solid-disabled.svg" alt="Clear Labels">
+      </button>
+      <button id="zoomCenter" title="Zoom to Selected">
+        <img src="zoom-center.svg" alt="Zoom Center">
       </button>
     </div>
   </div>
 
   <div class="actions">
     <button id="clearColors">Clear Colors</button>
-    <button id="labelSelected" disabled>
-      <img src="tag.svg" alt="Label">
-      Label Selected Groups
-    </button>
-    <button id="labelAll" disabled>
-      <img src="tag_solid.svg" alt="Label All">
-      Label All Groups
-    </button>
-    <button id="clear" disabled>
-      <img src="tag_solid-disabled.svg" alt="Clear Labels">
-      Clear Labels
-    </button>
   </div>
 
   <table id="rebarTable">
@@ -73,15 +76,11 @@
     let tcApi;
     let groups = [];
     let markupIds = [];
-    let selectedGroup = null; // now single group (since child = group)
+    let selectedGroup = null;
     let groupColors = {};
-    let sortColumns = [
-      { col: 'startX', dir: 'asc' },
-      { col: 'startY', dir: 'asc' },
-      { col: 'endX', dir: 'asc' },
-      { col: 'endY', dir: 'asc' }
-    ];
+    let sortColumns = []; // start with no sorting
     let expandedGroups = new Set();
+    let coloringActive = false;
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -188,29 +187,16 @@
       };
     }
 
-    async function colorGroups() {
-      debug('Applying random colors...');
-      try {
-        await tcApi.viewer.setObjectState([]);
-      } catch (e) {}
-
-      groupColors = {};
-
-      for (const group of groups) {
-        const key = group.key;
-        const color = randomColor();
-        groupColors[key] = color;
-        group.color = color;
-
-        try {
-          await tcApi.viewer.setObjectState({
-            modelId: group.modelId,
-            objectIds: group.objectIds,
-            color: color
-          });
-        } catch (e) {}
+    async function toggleColorGroups() {
+      coloringActive = !coloringActive;
+      const button = document.getElementById('colorGroups');
+      if (coloringActive) {
+        button.classList.add('active');
+        await colorGroups();
+      } else {
+        button.classList.remove('active');
+        await clearColors();
       }
-      renderTable();
     }
 
     async function clearColors() {
@@ -237,6 +223,8 @@
     }
 
     function sortTable() {
+      if (sortColumns.length === 0) return;
+
       groups.sort((a, b) => {
         for (const {col, dir} of sortColumns) {
           let A = a[col] ?? '';
@@ -266,13 +254,13 @@
           <td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});">
             <img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon" alt="Expand">
           </td>
-          <td>${group.mark}</td>
-          <td class="numeric">${group.commonStartX || '--'}</td>
-          <td class="numeric">${group.commonStartY || '--'}</td>
-          <td class="numeric">${group.commonEndX || '--'}</td>
-          <td class="numeric">${group.commonEndY || '--'}</td>
-          <td class="center">${group.diameter || '--'}</td>
-          <td>${group.shape || '--'}</td>
+          <td class="center">${group.mark}</td>
+          <td class="numeric">${group.commonStartX || '<span class="empty-cell">--</span>'}</td>
+          <td class="numeric">${group.commonStartY || '<span class="empty-cell">--</span>'}</td>
+          <td class="numeric">${group.commonEndX || '<span class="empty-cell">--</span>'}</td>
+          <td class="numeric">${group.commonEndY || '<span class="empty-cell">--</span>'}</td>
+          <td class="center">${group.diameter || '<span class="empty-cell">--</span>'}</td>
+          <td>${group.shape || '<span class="empty-cell">--</span>'}</td>
           <td class="numeric">${group.length}</td>
           <td class="center">${group.quantity}</td>
         `;
@@ -302,13 +290,13 @@
             childTr.className = 'child-row';
             childTr.innerHTML = `
               <td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});"></td>
-              <td class="gray-bg">${group.mark}</td>
-              <td class="numeric">${bar.startX || '--'}</td>
-              <td class="numeric">${bar.startY || '--'}</td>
-              <td class="numeric">${bar.endX || '--'}</td>
-              <td class="numeric">${bar.endY || '--'}</td>
-              <td class="center gray-bg">${group.diameter || '--'}</td>
-              <td class="gray-bg">${group.shape || '--'}</td>
+              <td class="center gray-bg">${group.mark}</td>
+              <td class="numeric">${bar.startX || '<span class="empty-cell">--</span>'}</td>
+              <td class="numeric">${bar.startY || '<span class="empty-cell">--</span>'}</td>
+              <td class="numeric">${bar.endX || '<span class="empty-cell">--</span>'}</td>
+              <td class="numeric">${bar.endY || '<span class="empty-cell">--</span>'}</td>
+              <td class="center gray-bg">${group.diameter || '<span class="empty-cell">--</span>'}</td>
+              <td class="gray-bg">${group.shape || '<span class="empty-cell">--</span>'}</td>
               <td class="numeric gray-bg">${group.length}</td>
               <td class="center gray-bg">${group.quantity}</td>
             `;
@@ -423,9 +411,7 @@
           g.commonEndY = endsY.size === 1 ? g.individualBars[0].endY : '';
         });
 
-        sortTable();
-
-        await colorGroups();
+        renderTable();
 
         document.getElementById('labelAll').disabled = false;
         document.getElementById('clear').disabled = false;
@@ -445,19 +431,22 @@
       th.onclick = () => {
         const col = th.dataset.sort;
         const existing = sortColumns.findIndex(s => s.col === col);
-        let newDir = 'asc';
 
         if (existing !== -1) {
-          newDir = sortColumns[existing].dir === 'asc' ? 'desc' : 'asc';
-          sortColumns[existing].dir = newDir;
+          const currentDir = sortColumns[existing].dir;
+          if (currentDir === 'asc') {
+            sortColumns[existing].dir = 'desc';
+          } else if (currentDir === 'desc') {
+            sortColumns.splice(existing, 1); // remove sorting for this column
+          }
         } else {
           sortColumns.unshift({ col, dir: 'asc' });
         }
 
-        document.querySelectorAll('th').forEach(h => h.innerHTML = h.innerHTML.replace(/ (▲|▼)$/, ''));
+        document.querySelectorAll('th').forEach(h => h.className = '');
         sortColumns.forEach(s => {
           const header = document.querySelector(`th[data-sort="${s.col}"]`);
-          if (header) header.innerHTML += s.dir === 'asc' ? ' ▲' : ' ▼';
+          if (header) header.className = 'sorted-' + s.dir;
         });
 
         sortTable();
@@ -465,7 +454,7 @@
     });
 
     document.getElementById('refresh').onclick = processRebar;
-    document.getElementById('colorGroups').onclick = colorGroups;
+    document.getElementById('colorGroups').onclick = toggleColorGroups;
     document.getElementById('clearColors').onclick = clearColors;
     document.getElementById('labelSelected').onclick = labelSelectedGroups;
     document.getElementById('labelAll').onclick = labelAllGroups;
