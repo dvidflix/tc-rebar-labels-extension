@@ -19,7 +19,8 @@
         <img src="update.svg" alt="Refresh">
       </button>
       <button id="colorGroups" class="toggle-button" title="Color Groups (Random)">
-        <img src="background.svg" alt="Color Groups">
+        <img src="background.svg" alt="Color Groups" class="icon-normal">
+        <img src="background-white.svg" alt="Color Groups Active" class="icon-active">
       </button>
       <button id="labelSelected" disabled title="Label Selected Group">
         <img src="tag.svg" alt="Label Selected">
@@ -34,10 +35,6 @@
         <img src="zoom-center.svg" alt="Zoom Center">
       </button>
     </div>
-  </div>
-
-  <div class="actions">
-    <button id="clearColors">Clear Colors</button>
   </div>
 
   <table id="rebarTable">
@@ -78,7 +75,7 @@
     let markupIds = [];
     let selectedGroup = null;
     let groupColors = {};
-    let sortColumns = []; // start with no sorting
+    let sortColumns = [];
     let expandedGroups = new Set();
     let coloringActive = false;
 
@@ -190,13 +187,38 @@
     async function toggleColorGroups() {
       coloringActive = !coloringActive;
       const button = document.getElementById('colorGroups');
+      button.classList.toggle('active', coloringActive);
+
       if (coloringActive) {
-        button.classList.add('active');
         await colorGroups();
       } else {
-        button.classList.remove('active');
         await clearColors();
       }
+    }
+
+    async function colorGroups() {
+      debug('Applying random colors...');
+      try {
+        await tcApi.viewer.setObjectState([]);
+      } catch (e) {}
+
+      groupColors = {};
+
+      for (const group of groups) {
+        const key = group.key;
+        const color = randomColor();
+        groupColors[key] = color;
+        group.color = color;
+
+        try {
+          await tcApi.viewer.setObjectState({
+            modelId: group.modelId,
+            objectIds: group.objectIds,
+            color: color
+          });
+        } catch (e) {}
+      }
+      renderTable();
     }
 
     async function clearColors() {
@@ -220,6 +242,11 @@
       } catch (e) {
         debug('Select/zoom error: ' + e.message);
       }
+    }
+
+    async function zoomToSelected() {
+      if (!selectedGroup) return;
+      await selectAndZoomGroup(selectedGroup);
     }
 
     function sortTable() {
@@ -436,8 +463,8 @@
           const currentDir = sortColumns[existing].dir;
           if (currentDir === 'asc') {
             sortColumns[existing].dir = 'desc';
-          } else if (currentDir === 'desc') {
-            sortColumns.splice(existing, 1); // remove sorting for this column
+          } else {
+            sortColumns.splice(existing, 1); // remove sorting
           }
         } else {
           sortColumns.unshift({ col, dir: 'asc' });
@@ -455,10 +482,10 @@
 
     document.getElementById('refresh').onclick = processRebar;
     document.getElementById('colorGroups').onclick = toggleColorGroups;
-    document.getElementById('clearColors').onclick = clearColors;
     document.getElementById('labelSelected').onclick = labelSelectedGroups;
     document.getElementById('labelAll').onclick = labelAllGroups;
     document.getElementById('clear').onclick = clearMarkups;
+    document.getElementById('zoomCenter').onclick = zoomToSelected;
 
     init();
   </script>

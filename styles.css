@@ -48,16 +48,6 @@ body {
   height: 20px;
 }
 
-/* Actions */
-.actions {
-  padding: 10px 20px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  background: #fff;
-  border-bottom: 1px solid #ddd;
-}
-
 /* Table - 24px group rows, 18px child rows */
 table {
   width: 100%;
@@ -103,13 +93,14 @@ tr.child-row.selected { background: #d0e4ff !important; }
   width: 40px;
 }
 
-/* Child row repeated columns */
+/* Child row repeated columns - toned down gray */
 .child-row td:nth-child(2),
 .child-row td:nth-child(7),
 .child-row td:nth-child(8),
 .child-row td:nth-child(9),
 .child-row td:nth-child(10) {
   background: #e0e1e9;
+  color: #666;
 }
 
 /* Alignment */
