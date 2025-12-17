@@ -30,9 +30,9 @@
   <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Instructions:</strong> Select one or more yellow rebar bars → click Refresh Rebar Data.</p>
+  <p><strong>Instructions:</strong> Select rebar bars → Refresh → multi-select rows → Select & Zoom → use native markup for labels (copy template).</p>
 
-  <label><strong>Label Template</strong> (for manual copy/paste into native markup):</label>
+  <label><strong>Label Template</strong> (copy for native markup):</label>
   <textarea id="template" rows="3">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
 
   <button id="refresh">Refresh Rebar Data</button>
@@ -180,7 +180,7 @@
       try {
         debug('Fetching selection...');
         const selection = await tcApi.viewer.getSelection();
-        debug(`Selection: ${selection.length} items`);
+        debug(`Selection retrieved: ${selection.length} items`);
 
         if (selection.length === 0) throw new Error('No objects selected.');
 
@@ -188,11 +188,17 @@
         for (const sel of selection) {
           const modelId = sel.modelId;
           const runtimeIds = sel.objectRuntimeIds || [];
+          debug(`Processing: modelId=${modelId}, runtimeIds=${runtimeIds.length}`);
+
           if (!modelId || runtimeIds.length === 0) continue;
 
           const propsArray = await tcApi.viewer.getObjectProperties(modelId, runtimeIds);
+          debug(`Got ${propsArray.length} property sets`);
+
           propsArray.forEach((props, i) => {
-            const hasRebar = props.properties?.some(p => p.name.includes('Reinforcement') || p.name.includes('Rebar'));
+            const hasRebar = props.properties?.some(p => 
+              p.name.includes('Reinforcement') || p.name.includes('Rebar')
+            );
             if (hasRebar) {
               allRebar.push({
                 id: runtimeIds[i],
@@ -203,7 +209,9 @@
           });
         }
 
-        if (allRebar.length === 0) throw new Error('No rebar found.');
+        debug(`Found ${allRebar.length} rebar elements`);
+
+        if (allRebar.length === 0) throw new Error('No rebar elements found.');
 
         const groupMap = {};
         for (const item of allRebar) {
