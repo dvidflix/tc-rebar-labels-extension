@@ -57,7 +57,6 @@
     <thead>
       <tr>
         <th></th> <!-- Expand -->
-        <th></th> <!-- Color -->
         <th data-sort="mark">Mark</th>
         <th data-sort="startX">Start X</th>
         <th data-sort="startY">Start Y</th>
@@ -192,7 +191,7 @@
       return flat;
     }
 
-    // Trimble Default Color Palette (50 colors)
+    // Trimble Default Color Palette (50 colors from your image)
     const defaultPalette = [
       { r: 0, g: 0, b: 139, a: 255 },
       { r: 173, g: 216, b: 230, a: 255 },
@@ -260,7 +259,12 @@
         const key = group.key;
         let color;
         if (mode === 'random') {
-          color = randomColor();
+          color = {
+            r: Math.floor(Math.random() * 256),
+            g: Math.floor(Math.random() * 256),
+            b: Math.floor(Math.random() * 256),
+            a: 255
+          };
         } else if (mode === 'palette') {
           color = defaultPalette[paletteIndex % defaultPalette.length];
           paletteIndex++;
@@ -345,10 +349,10 @@
             <img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon" alt="Expand">
           </td>
           <td class="center">${group.mark}</td>
-          <td class="numeric">${group.commonStartX || '<span class="empty-cell">--</span>'}</td>
-          <td class="numeric">${group.commonStartY || '<span class="empty-cell">--</span>'}</td>
-          <td class="numeric">${group.commonEndX || '<span class="empty-cell">--</span>'}</td>
-          <td class="numeric">${group.commonEndY || '<span class="empty-cell">--</span>'}</td>
+          <td class="numeric">${group.commonStartX === '' ? '<span class="empty-cell">--</span>' : group.commonStartX}</td>
+          <td class="numeric">${group.commonStartY === '' ? '<span class="empty-cell">--</span>' : group.commonStartY}</td>
+          <td class="numeric">${group.commonEndX === '' ? '<span class="empty-cell">--</span>' : group.commonEndX}</td>
+          <td class="numeric">${group.commonEndY === '' ? '<span class="empty-cell">--</span>' : group.commonEndY}</td>
           <td class="center">${group.diameter || '<span class="empty-cell">--</span>'}</td>
           <td>${group.shape || '<span class="empty-cell">--</span>'}</td>
           <td class="numeric">${group.length}</td>
@@ -381,14 +385,14 @@
             childTr.innerHTML = `
               <td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});"></td>
               <td class="center gray-bg">${group.mark}</td>
-              <td class="numeric">${bar.startX || '<span class="empty-cell">--</span>'}</td>
-              <td class="numeric">${bar.startY || '<span class="empty-cell">--</span>'}</td>
-              <td class="numeric">${bar.endX || '<span class="empty-cell">--</span>'}</td>
-              <td class="numeric">${bar.endY || '<span class="empty-cell">--</span>'}</td>
+              <td class="numeric">${bar.startX === '' ? '<span class="empty-cell">--</span>' : bar.startX}</td>
+              <td class="numeric">${bar.startY === '' ? '<span class="empty-cell">--</span>' : bar.startY}</td>
+              <td class="numeric">${bar.endX === '' ? '<span class="empty-cell">--</span>' : bar.endX}</td>
+              <td class="numeric">${bar.endY === '' ? '<span class="empty-cell">--</span>' : bar.endY}</td>
               <td class="center gray-bg">${group.diameter || '<span class="empty-cell">--</span>'}</td>
               <td class="gray-bg">${group.shape || '<span class="empty-cell">--</span>'}</td>
               <td class="numeric gray-bg">${group.length}</td>
-              <td class="center gray-bg">${group.quantity}</td>
+              <td class="center gray-bg"></td>
             `;
             childTr.onclick = (e) => {
               e.stopPropagation();

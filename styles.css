@@ -158,10 +158,14 @@ tr.child-row.selected { background: #d0e4ff !important; }
 .child-row td:nth-child(2),
 .child-row td:nth-child(7),
 .child-row td:nth-child(8),
-.child-row td:nth-child(9),
-.child-row td:nth-child(10) {
+.child-row td:nth-child(9) {
   background: #e0e1e9;
   color: #666;
+}
+
+/* Child row Count column empty */
+.child-row td:nth-child(10) {
+  background: white;
 }
 
 /* Alignment */
