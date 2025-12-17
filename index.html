@@ -65,7 +65,12 @@
     let markupIds = [];
     let selectedGroups = [];
     let groupColors = {};
-    let sortColumns = [{ col: 'startX', dir: 'asc' }, { col: 'startY', dir: 'asc' }];
+    let sortColumns = [
+      { col: 'startX', dir: 'asc' },
+      { col: 'startY', dir: 'asc' },
+      { col: 'endX', dir: 'asc' },
+      { col: 'endY', dir: 'asc' }
+    ];
     let expandedGroups = new Set();
 
     const debugConsole = document.getElementById('debugConsole');
@@ -372,10 +377,6 @@
               diameter: dia,
               shape,
               length,
-              commonStartX: flat['Start Point X'] || '',
-              commonStartY: flat['Start Point Y'] || '',
-              commonEndX: flat['End Point X'] || '',
-              commonEndY: flat['End Point Y'] || '',
               objectIds: [],
               sampleProps: item.props,
               modelId: item.modelId,
@@ -393,12 +394,24 @@
           });
         }
 
+        // Compute common values for group row
         groups = Object.values(groupMap);
         groups.forEach(g => {
           g.quantity = g.objectIds.length;
+
+          const startsX = new Set(g.individualBars.map(b => b.startX));
+          g.commonStartX = startsX.size === 1 ? g.individualBars[0].startX : '';
+
+          const startsY = new Set(g.individualBars.map(b => b.startY));
+          g.commonStartY = startsY.size === 1 ? g.individualBars[0].startY : '';
+
+          const endsX = new Set(g.individualBars.map(b => b.endX));
+          g.commonEndX = endsX.size === 1 ? g.individualBars[0].endX : '';
+
+          const endsY = new Set(g.individualBars.map(b => b.endY));
+          g.commonEndY = endsY.size === 1 ? g.individualBars[0].endY : '';
         });
 
-        sortColumns = [{ col: 'startX', dir: 'asc' }, { col: 'startY', dir: 'asc' }];
         sortTable();
 
         await colorGroups();
