@@ -26,11 +26,11 @@
   <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Instructions:</strong> Select one or more yellow rebar bars in the 3D viewer (box/lasso or single click). Then click Refresh Rebar Data.</p>
+  <p><strong>Success!</strong> The extension is working. Select rebar and click Refresh to group and label.</p>
 
-  <label><strong>Label Template</strong> (use exact property names with { }):</label>
-  <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm - {Rebar mark}</textarea>
-  <p><small>Common placeholders: {Serial number}, {Size}, {Length}, {Rebar mark}, {Shape code}, {Name}, {Dim A}, {Dim X}</small></p>
+  <label><strong>Label Template</strong> (recommended):</label>
+  <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm ({Rebar mark})</textarea>
+  <p><small>Works perfectly with your model. Other useful: {Shape code}, {Name}, {Dim A}, {Grade}</small></p>
 
   <button id="refresh">Refresh Rebar Data</button>
   <button id="labelSelected" disabled>Label Selected Group</button>
@@ -64,7 +64,6 @@
       } catch (err) {
         document.getElementById('status').textContent = 'Connection failed: ' + err.message;
         document.getElementById('status').classList.add('error');
-        console.error(err);
       }
     }
 
@@ -85,7 +84,7 @@
       markupIds.push(arrowId);
 
       const textId = await tcApi.viewer.markup.addTextMarkup({
-        text: text || 'Label',
+        text: text || 'Rebar',
         position: labelPos,
         color: { r: 0, g: 0, b: 0 },
         backgroundColor: { r: 255, g: 255, b: 255, a: 0.9 },
@@ -97,28 +96,11 @@
     async function labelGroup(group, isOnly = false) {
       if (isOnly) await clearMarkups();
 
-      const props = group.sampleProps;
+      const flat = flattenProps(group.sampleProps);
       let text = document.getElementById('template').value;
 
-      // Flatten nested properties
-      const flatProps = {};
-      function flatten(obj, prefix = '') {
-        for (const [key, value] of Object.entries(obj)) {
-          if (value && typeof value === 'object' && !Array.isArray(value) && value.value !== undefined) {
-            flatProps[prefix + key] = value.value;
-          } else if (value && typeof value === 'object' && !Array.isArray(value)) {
-            flatten(value, prefix + key + ' ');
-          } else if (!Array.isArray(value)) {
-            flatProps[prefix + key] = value;
-          }
-        }
-      }
-      flatten(props);
-
-      // Replace placeholders
-      for (const [key, value] of Object.entries(flatProps)) {
-        const valStr = (value === null || value === undefined) ? '' : value.toString();
-        text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), valStr);
+      for (const [key, value] of Object.entries(flat)) {
+        text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
       }
       text = text.replace(/\{[^}]+\}/g, '').trim();
 
@@ -133,6 +115,24 @@
       await addCallout(anchor, labelPos, text);
     }
 
+    // Improved flattening - handles nested properties correctly
+    function flattenProps(props) {
+      const flat = {};
+      if (!props || !props.properties) return flat;
+
+      props.properties.forEach(pset => {
+        if (pset.properties) {
+          pset.properties.forEach(prop => {
+            if (prop.value !== undefined) {
+              flat[pset.name + ' ' + prop.name] = prop.value;
+              flat[prop.name] = prop.value; // also add without pset prefix
+            }
+          });
+        }
+      });
+      return flat;
+    }
+
     async function processRebar() {
       await clearMarkups();
       groups = [];
@@ -142,32 +142,27 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="5">Processing selected objects...</td></tr>';
-      document.getElementById('status').textContent = 'Processing...';
-      document.getElementById('status').classList.remove('good', 'error');
+      tbody.innerHTML = '<tr><td colspan="5">Processing...</td></tr>';
 
       try {
         const selection = await tcApi.viewer.getSelection();
-
-        if (selection.length === 0) {
-          throw new Error('No objects selected. Select one or more yellow rebar bars first.');
-        }
+        if (selection.length === 0) throw new Error('No objects selected.');
 
         let allRebar = [];
         for (const sel of selection) {
           const modelId = sel.modelId;
           const runtimeIds = sel.objectRuntimeIds || [];
-
           if (!modelId || runtimeIds.length === 0) continue;
 
           const propsArray = await tcApi.viewer.getObjectProperties(modelId, runtimeIds);
 
           propsArray.forEach((props, i) => {
-            // Check if it's rebar by looking for key properties
-            const hasRebarProps = props.properties.some(p => 
-              p.name === 'ICOS Rebar' || p.name === 'Tekla Reinforcement - Bending List'
+            // Reliable detection: look for known rebar property sets
+            const hasRebarPset = props.properties?.some(p => 
+              p.name === 'Tekla Reinforcement - Bending List' || 
+              p.name === 'ICOS Rebar'
             );
-            if (hasRebarProps) {
+            if (hasRebarPset) {
               allRebar.push({
                 id: runtimeIds[i],
                 props: props,
@@ -177,30 +172,16 @@
           });
         }
 
-        if (allRebar.length === 0) {
-          throw new Error('No rebar detected. The selected objects do not appear to be rebar elements.');
-        }
+        if (allRebar.length === 0) throw new Error('No rebar found in selection.');
 
-        // Flatten properties for grouping and labeling
         const groupMap = {};
         for (const item of allRebar) {
-          const flat = {};
-          function flatten(obj, prefix = '') {
-            for (const [key, value] of Object.entries(obj)) {
-              if (value && typeof value === 'object' && !Array.isArray(value) && value.value !== undefined) {
-                flat[prefix + key] = value.value;
-              } else if (value && typeof value === 'object' && !Array.isArray(value)) {
-                flatten(value, prefix + key + ' ');
-              } else if (!Array.isArray(value)) {
-                flat[prefix + key] = value;
-              }
-            }
-          }
-          flatten(item.props);
+          const flat = flattenProps(item.props);
 
-          const mark = flat['Serial number'] || flat['Rebar mark'] || 'Unknown';
+          const mark = flat['Serial number'] || flat['Rebar mark'] || flat['Group position number'] || 'Unknown';
           const dia = flat['Size'] || '';
           const len = Math.round(Number(flat['Length'] || 0));
+
           const key = `${mark}|${dia}|${len}|${item.modelId}`;
 
           if (!groupMap[key]) {
@@ -252,7 +233,6 @@
         tbody.innerHTML = `<tr><td colspan="5">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
         document.getElementById('status').classList.add('error');
-        console.error(err);
       }
     }
 
