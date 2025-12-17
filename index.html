@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rebar Labels Extension - With Debug</title>
+  <title>Rebar Labels Extension</title>
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
@@ -27,12 +27,7 @@
   <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Instructions:</strong></p>
-  <ol>
-    <li>Select <strong>one single yellow rebar bar</strong> in the 3D viewer.</li>
-    <li>Click <strong>Debug Selection & Properties</strong> first – this will show if properties are fetched correctly.</li>
-    <li>If debug shows properties, click <strong>Refresh Rebar Data</strong> to populate the table.</li>
-  </ol>
+  <p><strong>Instructions:</strong> Select one or more yellow rebar bars. Start with one for testing. Click Debug first to verify properties.</p>
 
   <button id="debug">Debug Selection & Properties</button>
   <button id="refresh">Refresh Rebar Data</button>
@@ -45,7 +40,6 @@
 
   <label><strong>Label Template</strong> (use exact property names with { }):</label>
   <textarea id="template" rows="3">[ {Serial number} ] Ø{Size} L:{Length} mm</textarea>
-  <p><small>Known properties: Serial number, Size, Length, Shape code, Rebar mark, Start Point X/Y, End Point X/Y.</small></p>
 
   <table id="rebarTable">
     <thead>
@@ -69,7 +63,7 @@
     async function init() {
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
-        document.getElementById('status').textContent = 'Connected! Select a rebar bar and use Debug first.';
+        document.getElementById('status').textContent = 'Connected! Select rebar and use Debug first.';
         document.getElementById('status').classList.add('good');
       } catch (err) {
         document.getElementById('status').textContent = 'Connection failed: ' + err.message;
@@ -82,6 +76,13 @@
       const output = document.getElementById('debugOutput');
       output.textContent += msg + '\n';
       console.log('DEBUG:', msg);
+    }
+
+    // Helper to safely stringify objects with BigInt
+    function safeStringify(obj) {
+      return JSON.stringify(obj, (key, value) =>
+        typeof value === 'bigint' ? value.toString() : value
+      );
     }
 
     async function clearMarkups() {
@@ -117,7 +118,8 @@
       let text = document.getElementById('template').value;
 
       for (const [key, value] of Object.entries(props)) {
-        text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
+        const valStr = (typeof value === 'bigint') ? value.toString() : (value || '');
+        text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), valStr);
       }
       text = text.replace(/\{[^}]+\}/g, '').trim();
 
@@ -139,10 +141,10 @@
       try {
         const selection = await tcApi.viewer.getSelection();
         logDebug(`Selection length: ${selection.length}`);
-        logDebug(`Raw selection: ${JSON.stringify(selection, null, 2)}`);
+        logDebug(`Raw selection: ${safeStringify(selection)}`);
 
         if (selection.length === 0) {
-          logDebug('No selection - please select one yellow rebar bar.');
+          logDebug('No selection - select one yellow rebar bar.');
           return;
         }
 
@@ -151,20 +153,20 @@
           const modelId = sel.modelId;
           const runtimeIds = sel.objectRuntimeIds || [];
           logDebug(`\nModelId: ${modelId}`);
-          logDebug(`RuntimeIds: ${JSON.stringify(runtimeIds)}`);
+          logDebug(`RuntimeIds: ${safeStringify(runtimeIds)}`);
 
           if (!modelId || runtimeIds.length === 0) {
             logDebug('Missing modelId or runtimeIds.');
             continue;
           }
 
-          logDebug(`Calling tcApi.viewer.getObjectProperties("${modelId}", [${runtimeIds}]) ...`);
+          logDebug(`Calling tcApi.viewer.getObjectProperties("${modelId}", runtimeIds) ...`);
           try {
             const propsArray = await tcApi.viewer.getObjectProperties(modelId, runtimeIds);
             logDebug(`SUCCESS! Received ${propsArray.length} property object(s)`);
             propsArray.forEach((props, i) => {
               logDebug(`\nProperties for runtimeId ${runtimeIds[i]}:`);
-              logDebug(JSON.stringify(props, null, 2));
+              logDebug(safeStringify(props, null, 2));
             });
             foundProps = true;
           } catch (e) {
@@ -174,7 +176,7 @@
         }
 
         if (!foundProps) {
-          logDebug('\nNo properties fetched - something is wrong with the call.');
+          logDebug('\nNo properties fetched.');
         } else {
           logDebug('\nProperties fetched successfully! You can now use Refresh Rebar Data.');
         }
@@ -227,7 +229,7 @@
         }
 
         if (allRebar.length === 0) {
-          throw new Error('No rebar detected. Run Debug Selection & Properties to verify fetching works.');
+          throw new Error('No rebar detected. Run Debug to verify properties.');
         }
 
         const groupMap = {};
@@ -235,7 +237,9 @@
           const p = item.props;
           const mark = p['Serial number'] || p['Rebar mark'] || 'Unknown';
           const dia = p['Size'] || '';
-          const len = Math.round(parseFloat(p['Length']) || 0);
+          let len = p['Length'];
+          if (typeof len === 'bigint') len = Number(len);
+          len = Math.round(len || 0);
           const key = `${mark}|${dia}|${len}|${item.modelId}`;
 
           if (!groupMap[key]) {
