@@ -30,7 +30,7 @@
   <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Instructions:</strong> Load your rebar model in the 3D viewer → click Refresh Rebar Data (no selection needed).</p>
+  <p><strong>Instructions:</strong> Load your rebar model in the 3D viewer → click Refresh Rebar Data.</p>
 
   <label><strong>Label Template</strong>:</label>
   <textarea id="template" rows="3">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
@@ -285,46 +285,55 @@
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="10">Fetching all loaded objects...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10">Fetching loaded models...</td></tr>';
 
       try {
-        debug('Calling tcApi.viewer.getObjects()...');
-        const allObjects = await tcApi.viewer.getObjects();
-        debug(`getObjects() returned ${allObjects.length} objects`);
-
-        if (allObjects.length === 0) {
-          throw new Error('No objects found in loaded model. Make sure your rebar model is loaded.');
+        let models = [];
+        if (typeof tcApi.viewer.getLoadedModels === 'function') {
+          debug('Using getLoadedModels()');
+          models = await tcApi.viewer.getLoadedModels();
+        } else if (typeof tcApi.viewer.getModels === 'function') {
+          debug('Using getModels() as fallback');
+          models = await tcApi.viewer.getModels();
+        } else {
+          throw new Error('No method to get models available.');
         }
 
-        let allRebar = [];
-        for (const obj of allObjects) {
-          const modelId = obj.modelId;
-          const runtimeId = obj.objectRuntimeId || obj.id;
-          if (!modelId || !runtimeId) continue;
+        debug(`Found ${models.length} model(s)`);
 
-          try {
-            const propsArray = await tcApi.viewer.getObjectProperties(modelId, [runtimeId]);
-            const props = propsArray[0];
-            if (props && props.properties) {
-              const hasRebar = props.properties.some(p => 
-                p.name.includes('Reinforcement') || p.name.includes('Rebar')
-              );
-              if (hasRebar) {
-                allRebar.push({
-                  id: runtimeId,
-                  props: props,
-                  modelId: modelId
-                });
+        let allRebar = [];
+        for (const model of models) {
+          const modelId = model.id || model.modelId;
+          debug(`Fetching objects for modelId: ${modelId}`);
+          const objects = await tcApi.viewer.getObjects(modelId);
+          debug(`Got ${objects.length} objects`);
+
+          for (const obj of objects) {
+            const runtimeId = obj.objectRuntimeId || obj.id;
+            if (!runtimeId) continue;
+
+            try {
+              const propsArray = await tcApi.viewer.getObjectProperties(modelId, [runtimeId]);
+              const props = propsArray[0];
+              if (props && props.properties) {
+                const hasRebar = props.properties.some(p => p.name.includes('Reinforcement') || p.name.includes('Rebar'));
+                if (hasRebar) {
+                  allRebar.push({
+                    id: runtimeId,
+                    props: props,
+                    modelId: modelId
+                  });
+                }
               }
+            } catch (e) {
+              // silent skip
             }
-          } catch (e) {
-            // silent skip
           }
         }
 
         debug(`Found ${allRebar.length} rebar elements`);
 
-        if (allRebar.length === 0) throw new Error('No rebar elements found in model.');
+        if (allRebar.length === 0) throw new Error('No rebar elements found.');
 
         const groupMap = {};
         for (const item of allRebar) {
