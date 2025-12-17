@@ -8,13 +8,14 @@
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
     h1 { color: #1a5fb4; }
-    button { padding: 10px 16px; margin: 5px; background: #1a5fb4; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button { padding: 10px 16px; margin: 5px; background: #1a5fb4; color: white; border: none; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
     button:hover { background: #144a8a; }
     button:disabled { background: #aaa; cursor: not-allowed; }
+    button img { height: 20px; vertical-align: middle; }
     textarea { padding: 8px; margin: 10px 0; width: 100%; box-sizing: border-box; }
     table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
     th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-    th { background: #1a5fb4; color: white; cursor: pointer; user-select: none; }
+    th { background: #1a5fb4; color: white; cursor: pointer; user-select: none; position: relative; }
     th:hover { background: #144a8a; }
     th.sorted-asc::after { content: " ▲"; }
     th.sorted-desc::after { content: " ▼"; }
@@ -31,15 +32,19 @@
   <h1>Rebar Labels Extension</h1>
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Instructions:</strong> Select one or more yellow rebar bars → click Refresh Rebar Data.</p>
+  <p><strong>Instructions:</strong> Select one or more yellow rebar bars → click the refresh button.</p>
 
   <label><strong>Label Template</strong> (recommended):</label>
   <textarea id="template" rows="3">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
   <p><small>Other useful: {Size}, {Length}, {Rebar mark}, {Shape code}, {End Point X}, {End Point Y}, {Grade}</small></p>
 
-  <button id="refresh">Refresh Rebar Data</button>
+  <button id="refresh">
+    <img src="https://raw.githubusercontent.com/dvidflix/tc-rebar-labels-extension/main/refresh.png" alt="Refresh">
+    Refresh Rebar Data
+  </button>
   <button id="colorGroups">Color Groups (Random)</button>
   <button id="clearColors">Clear Colors</button>
+  <button id="selectGroups" disabled>Select & Zoom Selected Groups</button>
   <button id="labelSelected" disabled>Label Selected Groups</button>
   <button id="labelAll" disabled>Label All Groups</button>
   <button id="clear" disabled>Clear Labels</button>
@@ -48,16 +53,15 @@
     <thead>
       <tr>
         <th></th> <!-- Color swatch -->
-        <th data-sort="mark">Mark/Serial</th>
-        <th data-sort="diameter">Diameter/Size</th>
-        <th data-sort="shape">Shape code</th>
+        <th data-sort="mark">Mark</th>
         <th data-sort="startX">Start X</th>
         <th data-sort="startY">Start Y</th>
         <th data-sort="endX">End X</th>
         <th data-sort="endY">End Y</th>
+        <th data-sort="diameter">Diam.</th>
+        <th data-sort="shape">Shape code</th>
         <th data-sort="length">Length</th>
-        <th data-sort="qty">Qty</th>
-        <th data-sort="total">Total Length</th>
+        <th data-sort="quantity">Count</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -72,7 +76,7 @@
     let markupIds = [];
     let selectedGroups = [];
     let groupColors = {};
-    let sortDirection = {};
+    let sortColumns = []; // array of {col, dir}
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -88,7 +92,7 @@
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
         debug('Connected successfully');
-        document.getElementById('status').textContent = 'Connected! Select rebar bars and click Refresh.';
+        document.getElementById('status').textContent = 'Connected! Select rebar bars and click the refresh button.';
         document.getElementById('status').classList.add('good');
       } catch (err) {
         debug('Connection error: ' + err.message);
@@ -187,12 +191,10 @@
     }
 
     async function colorGroups() {
-      debug('Applying random colors (ColorRGBA with a:255)...');
+      debug('Applying random colors...');
       try {
         await tcApi.viewer.setObjectState([]);
-      } catch (e) {
-        debug('Clear colors failed: ' + e.message);
-      }
+      } catch (e) {}
 
       groupColors = {};
 
@@ -208,29 +210,22 @@
             objectIds: group.objectIds,
             color: color
           });
-          debug(`Colored group ${group.mark}`);
-        } catch (e) {
-          debug('Color error for group ' + group.mark + ': ' + e.message);
-        }
+        } catch (e) {}
       }
       renderTable();
     }
 
     async function clearColors() {
-      debug('Clearing colors...');
       groupColors = {};
       groups.forEach(g => g.color = null);
       try {
         await tcApi.viewer.setObjectState([]);
-      } catch (e) {
-        debug('Clear colors error: ' + e.message);
-      }
+      } catch (e) {}
       renderTable();
     }
 
-    async function selectAndZoomGroups() {
+    async function selectSelectedGroups() {
       if (selectedGroups.length === 0) return;
-      debug('Selecting and zooming to selected groups...');
 
       const modelObjectIds = selectedGroups.map(g => ({
         modelId: g.modelId,
@@ -240,19 +235,25 @@
       try {
         await tcApi.viewer.setSelection({ modelObjectIds }, "set");
         await tcApi.viewer.zoomTo({ modelObjectIds });
-        debug('Groups selected and zoomed');
       } catch (e) {
         debug('Select/zoom error: ' + e.message);
       }
     }
 
-    function sortTable(column, dir) {
+    function sortTable() {
+      if (sortColumns.length === 0) return;
+
       groups.sort((a, b) => {
-        let A = a[column] ?? '';
-        let B = b[column] ?? '';
-        if (typeof A === 'string') A = A.toLowerCase();
-        if (typeof B === 'string') B = B.toLowerCase();
-        return (A < B ? -1 : A > B ? 1 : 0) * (dir === 'asc' ? 1 : -1);
+        for (const {col, dir} of sortColumns) {
+          let A = a[col] ?? '';
+          let B = b[col] ?? '';
+          if (typeof A === 'string') A = A.toLowerCase();
+          if (typeof B === 'string') B = B.toLowerCase();
+          if (A !== B) {
+            return (A < B ? -1 : 1) * (dir === 'asc' ? 1 : -1);
+          }
+        }
+        return 0;
       });
       renderTable();
     }
@@ -268,15 +269,14 @@
         tr.innerHTML = `
           <td>${swatch}</td>
           <td>${group.mark}</td>
-          <td>${group.diameter}</td>
-          <td>${group.shape}</td>
           <td>${group.startX}</td>
           <td>${group.startY}</td>
           <td>${group.endX}</td>
           <td>${group.endY}</td>
+          <td>${group.diameter}</td>
+          <td>${group.shape}</td>
           <td>${group.length}</td>
           <td>${group.quantity}</td>
-          <td>${group.totalLength}</td>
         `;
         tr.onclick = (e) => {
           if (e.ctrlKey || e.metaKey) {
@@ -294,10 +294,10 @@
           }
 
           selectedGroups = groups.filter((_, i) => tbody.children[i].classList.contains('selected'));
+          document.getElementById('selectGroups').disabled = selectedGroups.length === 0;
           document.getElementById('labelSelected').disabled = selectedGroups.length === 0;
 
-          // Auto select & zoom on any row selection change
-          selectAndZoomGroups();
+          selectSelectedGroups(); // auto select & zoom
         };
         tbody.appendChild(tr);
       });
@@ -308,12 +308,13 @@
       await clearMarkups();
       groups = [];
       selectedGroups = [];
+      document.getElementById('selectGroups').disabled = true;
       document.getElementById('labelSelected').disabled = true;
       document.getElementById('labelAll').disabled = true;
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="11">Processing...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10">Processing...</td></tr>';
 
       try {
         debug('Fetching selection...');
@@ -326,13 +327,9 @@
         for (const sel of selection) {
           const modelId = sel.modelId;
           const runtimeIds = sel.objectRuntimeIds || [];
-          debug(`Processing: modelId=${modelId}, runtimeIds=${runtimeIds.length}`);
-
           if (!modelId || runtimeIds.length === 0) continue;
 
           const propsArray = await tcApi.viewer.getObjectProperties(modelId, runtimeIds);
-          debug(`Got ${propsArray.length} property sets`);
-
           propsArray.forEach((props, i) => {
             const hasRebar = props.properties?.some(p => 
               p.name === 'Tekla Reinforcement - Bending List' || 
@@ -348,9 +345,7 @@
           });
         }
 
-        debug(`Found ${allRebar.length} rebar elements`);
-
-        if (allRebar.length === 0) throw new Error('No rebar elements found.');
+        if (allRebar.length === 0) throw new Error('No rebar found.');
 
         const groupMap = {};
         for (const item of allRebar) {
@@ -359,10 +354,10 @@
           const mark = flat['Serial number'] || flat['Rebar mark'] || flat['Group position number'] || 'Unknown';
           const dia = flat['Size'] || '';
           const shape = flat['Shape'] || flat['Shape code'] || '';
-          const startX = flat['Start Point X'] || '';
-          const startY = flat['Start Point Y'] || '';
-          const endX = flat['End Point X'] || '';
-          const endY = flat['End Point Y'] || '';
+          const startX = Number(flat['Start Point X'] || 0);
+          const startY = Number(flat['Start Point Y'] || 0);
+          const endX = Number(flat['End Point X'] || 0);
+          const endY = Number(flat['End Point Y'] || 0);
           const len = Math.round(Number(flat['Length'] || 0));
 
           const key = `${mark}|${dia}|${len}|${shape}|${item.modelId}`;
@@ -388,10 +383,12 @@
         groups = Object.values(groupMap);
         groups.forEach(g => {
           g.quantity = g.objectIds.length;
-          g.totalLength = (g.length * g.quantity).toFixed(0);
         });
 
-        renderTable();
+        // Default sort: Start X asc, then Start Y asc
+        sortColumns = [{ col: 'startX', dir: 'asc' }, { col: 'startY', dir: 'asc' }];
+        sortTable();
+
         await colorGroups();
 
         document.getElementById('labelAll').disabled = false;
@@ -401,31 +398,45 @@
         debug('Refresh completed');
       } catch (err) {
         debug('ERROR: ' + err.message);
-        tbody.innerHTML = `<tr><td colspan="11">Error: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
         document.getElementById('status').classList.add('error');
       }
       debug('=== REFRESH ENDED ===');
     }
 
+    // Multi-column sorting
     document.querySelectorAll('th[data-sort]').forEach(th => {
       th.onclick = () => {
         const col = th.dataset.sort;
-        const cur = sortDirection[col] || 'asc';
-        const newDir = cur === 'asc' ? 'desc' : 'asc';
-        sortDirection = {};
-        sortDirection[col] = newDir;
 
+        // Find if this column is already in sortColumns
+        const existing = sortColumns.findIndex(s => s.col === col);
+        let newDir = 'asc';
+
+        if (existing !== -1) {
+          newDir = sortColumns[existing].dir === 'asc' ? 'desc' : 'asc';
+          sortColumns[existing].dir = newDir;
+        } else {
+          // Add as primary sort
+          sortColumns.unshift({ col, dir: 'asc' });
+        }
+
+        // Update header arrows
         document.querySelectorAll('th').forEach(h => h.className = '');
-        th.className = 'sorted-' + newDir;
+        sortColumns.forEach((s, i) => {
+          const header = document.querySelector(`th[data-sort="${s.col}"]`);
+          if (header) header.className = 'sorted-' + s.dir;
+        });
 
-        sortTable(col, newDir);
+        sortTable();
       };
     });
 
     document.getElementById('refresh').onclick = processRebar;
     document.getElementById('colorGroups').onclick = colorGroups;
     document.getElementById('clearColors').onclick = clearColors;
+    document.getElementById('selectGroups').onclick = selectSelectedGroups;
     document.getElementById('labelSelected').onclick = labelSelectedGroups;
     document.getElementById('labelAll').onclick = labelAllGroups;
     document.getElementById('clear').onclick = clearMarkups;
