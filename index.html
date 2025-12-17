@@ -262,22 +262,15 @@
     function sortTable() {
       groups.sort((a, b) => {
         for (const {col, dir} of sortColumns) {
-          let A = a[col];
-          let B = b[col];
-
-          // Convert empty to very large negative number for sorting
-          if (A === '' || A === null) A = -Infinity;
-          if (B === '' || B === null) B = -Infinity;
-
-          A = Number(A);
-          B = Number(B);
-
-          if (isNaN(A)) A = a[col] ?? '';
-          if (isNaN(B)) B = b[col] ?? '';
-
-          if (typeof A === 'string') A = A.toLowerCase();
-          if (typeof B === 'string') B = B.toLowerCase();
-
+          let A = a[col] ?? '';
+          let B = b[col] ?? '';
+          // Convert to number if possible (for X/Y coordinates)
+          const numA = parseFloat(A);
+          const numB = parseFloat(B);
+          if (!isNaN(numA) && !isNaN(numB)) {
+            A = numA;
+            B = numB;
+          }
           if (A !== B) {
             return (A < B ? -1 : 1) * (dir === 'asc' ? 1 : -1);
           }
@@ -302,12 +295,12 @@
             <img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon" alt="Expand">
           </td>
           <td class="center">${group.mark}</td>
-          <td class="numeric">${group.commonStartX || ''}</td>
-          <td class="numeric">${group.commonStartY || ''}</td>
-          <td class="numeric">${group.commonEndX || ''}</td>
-          <td class="numeric">${group.commonEndY || ''}</td>
-          <td class="center">${group.diameter || ''}</td>
-          <td>${group.shape || ''}</td>
+          <td class="numeric">${group.commonStartX || '<span class="empty-cell">--</span>'}</td>
+          <td class="numeric">${group.commonStartY || '<span class="empty-cell">--</span>'}</td>
+          <td class="numeric">${group.commonEndX || '<span class="empty-cell">--</span>'}</td>
+          <td class="numeric">${group.commonEndY || '<span class="empty-cell">--</span>'}</td>
+          <td class="center">${group.diameter || '<span class="empty-cell">--</span>'}</td>
+          <td>${group.shape || '<span class="empty-cell">--</span>'}</td>
           <td class="numeric">${group.length}</td>
           <td class="center">${group.quantity}</td>
         `;
@@ -338,12 +331,12 @@
             childTr.innerHTML = `
               <td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});"></td>
               <td class="center gray-bg">${group.mark}</td>
-              <td class="numeric">${bar.startX}</td>
-              <td class="numeric">${bar.startY}</td>
-              <td class="numeric">${bar.endX}</td>
-              <td class="numeric">${bar.endY}</td>
-              <td class="center gray-bg">${group.diameter || ''}</td>
-              <td class="gray-bg">${group.shape || ''}</td>
+              <td class="numeric">${bar.startX || '<span class="empty-cell">--</span>'}</td>
+              <td class="numeric">${bar.startY || '<span class="empty-cell">--</span>'}</td>
+              <td class="numeric">${bar.endX || '<span class="empty-cell">--</span>'}</td>
+              <td class="numeric">${bar.endY || '<span class="empty-cell">--</span>'}</td>
+              <td class="center gray-bg">${group.diameter || '<span class="empty-cell">--</span>'}</td>
+              <td class="gray-bg">${group.shape || '<span class="empty-cell">--</span>'}</td>
               <td class="numeric gray-bg">${group.length}</td>
               <td class="center gray-bg">${group.quantity}</td>
             `;

@@ -141,11 +141,6 @@ tr.child-row.selected { background: #d0e4ff !important; }
   color: #666;
 }
 
-/* Empty cells - light gray background */
-td:empty {
-  background: #e0e1e9;
-}
-
 /* Alignment */
 .numeric { text-align: right; }
 .center { text-align: center; }
@@ -155,6 +150,12 @@ td:empty {
   width: 16px;
   height: 16px;
   vertical-align: middle;
+}
+
+/* Empty cells - "--" text */
+.empty-cell {
+  color: #999;
+  font-style: italic;
 }
 
 /* Footer */
