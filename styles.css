@@ -40,63 +40,8 @@ body {
   background: #f0f0f0;
 }
 
-.header-actions button.active {
-  background: #dcedf9;
-}
-
 .header-actions button img {
   height: 20px;
-}
-
-/* Menu Popup */
-.menu-popup {
-  display: none;
-  position: absolute;
-  top: 60px;
-  right: 20px;
-  background: white;
-  border: 1px solid #ddd;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  border-radius: 4px;
-  z-index: 1000;
-  width: 220px;
-}
-
-.menu-popup-content {
-  padding: 12px 0;
-}
-
-.menu-popup-content h4 {
-  margin: 0 16px 8px;
-  font-size: 14px;
-  color: #333;
-  font-weight: 600;
-}
-
-.menu-popup-content button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 10px 16px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.menu-popup-content button:hover {
-  background: #f0f0f0;
-}
-
-.menu-popup-content button.active {
-  background: #dcedf9;
-  font-weight: 600;
-}
-
-.menu-popup-content hr {
-  margin: 8px 0;
-  border: none;
-  border-top: 1px solid #ddd;
 }
 
 /* Actions */

@@ -18,24 +18,13 @@
       <button id="refresh" title="Refresh Rebar Data">
         <img src="update.svg" alt="Refresh">
       </button>
-      <button id="menuButton" title="Menu">
-        <img src="menu.svg" alt="Menu">
-      </button>
-    </div>
-  </div>
-
-  <!-- Menu Popup -->
-  <div id="menuPopup" class="menu-popup">
-    <div class="menu-popup-content">
-      <h4>Color by:</h4>
-      <button id="colorRandom" class="toggle-button">Random</button>
-      <button id="colorPalette">Default Palette</button>
-      <hr>
-      <button id="clearColorsBtn">Clear Colors</button>
     </div>
   </div>
 
   <div class="actions">
+    <button id="colorGroups">Color Groups (Random)</button>
+    <button id="clearColors">Clear Colors</button>
+    <button id="selectGroups" disabled>Select & Zoom Selected Groups</button>
     <button id="labelSelected" disabled>
       <img src="tag.svg" alt="Label">
       Label Selected Groups
@@ -48,15 +37,13 @@
       <img src="tag_solid-disabled.svg" alt="Clear Labels">
       Clear Labels
     </button>
-    <button id="zoomCenter" title="Zoom to Selected">
-      <img src="zoom-center.svg" alt="Zoom Center">
-    </button>
   </div>
 
   <table id="rebarTable">
     <thead>
       <tr>
         <th></th> <!-- Expand -->
+        <th></th> <!-- Color -->
         <th data-sort="mark">Mark</th>
         <th data-sort="startX">Start X</th>
         <th data-sort="startY">Start Y</th>
@@ -89,11 +76,10 @@
     let tcApi;
     let groups = [];
     let markupIds = [];
-    let selectedGroup = null;
+    let selectedGroups = [];
     let groupColors = {};
     let sortColumns = [];
     let expandedGroups = new Set();
-    let coloringMode = 'none';
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -163,9 +149,11 @@
     }
 
     async function labelSelectedGroups() {
-      if (!selectedGroup) return;
+      if (selectedGroups.length === 0) return;
       await clearMarkups();
-      await addLabel(selectedGroup);
+      for (const group of selectedGroups) {
+        await addLabel(group);
+      }
     }
 
     async function labelAllGroups() {
@@ -191,86 +179,26 @@
       return flat;
     }
 
-    // Trimble Default Color Palette (50 colors from your image)
-    const defaultPalette = [
-      { r: 0, g: 0, b: 139, a: 255 },
-      { r: 173, g: 216, b: 230, a: 255 },
-      { r: 255, g: 0, b: 0, a: 255 },
-      { r: 0, g: 255, b: 255, a: 255 },
-      { r: 0, g: 100, b: 0, a: 255 },
-      { r: 255, g: 255, b: 224, a: 255 },
-      { r: 128, g: 0, b: 128, a: 255 },
-      { r: 0, g: 0, b: 255, a: 255 },
-      { r: 255, g: 255, b: 0, a: 255 },
-      { r: 0, g: 128, b: 0, a: 255 },
-      { r: 255, g: 228, b: 196, a: 255 },
-      { r: 255, g: 165, b: 0, a: 255 },
-      { r: 0, g: 128, b: 128, a: 255 },
-      { r: 139, g: 0, b: 0, a: 255 },
-      { r: 165, g: 42, b: 42, a: 255 },
-      { r: 128, g: 128, b: 128, a: 255 },
-      { r: 255, g: 192, b: 203, a: 255 },
-      { r: 0, g: 255, b: 0, a: 255 },
-      { r: 255, g: 105, b: 180, a: 255 },
-      { r: 255, g: 140, b: 0, a: 255 },
-      { r: 220, g: 20, b: 60, a: 255 },
-      { r: 255, g: 99, b: 71, a: 255 },
-      { r: 218, g: 112, b: 214, a: 255 },
-      { r: 30, g: 144, b: 255, a: 255 },
-      { r: 50, g: 205, b: 50, a: 255 },
-      { r: 186, g: 85, b: 211, a: 255 },
-      { r: 173, g: 255, b: 47, a: 255 },
-      { r: 60, g: 179, b: 113, a: 255 },
-      { r: 255, g: 20, b: 147, a: 255 },
-      { r: 255, g: 215, b: 0, a: 255 },
-      { r: 255, g: 182, b: 193, a: 255 },
-      { r: 139, g: 69, b: 19, a: 255 },
-      { r: 0, g: 255, b: 127, a: 255 },
-      { r: 255, g: 160, b: 122, a: 255 },
-      { r: 255, g: 0, b: 255, a: 255 },
-      { r: 240, g: 230, b: 140, a: 255 },
-      { r: 128, g: 0, b: 0, a: 255 },
-      { r: 0, g: 206, b: 209, a: 255 },
-      { r: 255, g: 228, b: 181, a: 255 },
-      { r: 199, g: 21, b: 133, a: 255 },
-      { r: 255, g: 69, b: 0, a: 255 },
-      { r: 144, g: 238, b: 144, a: 255 },
-      { r: 72, g: 209, b: 204, a: 255 },
-      { r: 210, g: 180, b: 140, a: 255 },
-      { r: 205, g: 133, b: 63, a: 255 },
-      { r: 152, g: 251, b: 152, a: 255 },
-      { r: 250, g: 240, b: 230, a: 255 },
-      { r: 160, g: 82, b: 45, a: 255 },
-      { r: 255, g: 245, b: 238, a: 255 },
-      { r: 139, g: 0, b: 139, a: 255 }
-    ];
+    function randomColor() {
+      return {
+        r: Math.floor(Math.random() * 256),
+        g: Math.floor(Math.random() * 256),
+        b: Math.floor(Math.random() * 256),
+        a: 255
+      };
+    }
 
-    async function applyColoring(mode) {
-      coloringMode = mode;
-      debug('Applying ' + mode + ' colors...');
+    async function colorGroups() {
+      debug('Applying random colors...');
       try {
         await tcApi.viewer.setObjectState([]);
       } catch (e) {}
 
       groupColors = {};
 
-      let paletteIndex = 0;
       for (const group of groups) {
         const key = group.key;
-        let color;
-        if (mode === 'random') {
-          color = {
-            r: Math.floor(Math.random() * 256),
-            g: Math.floor(Math.random() * 256),
-            b: Math.floor(Math.random() * 256),
-            a: 255
-          };
-        } else if (mode === 'palette') {
-          color = defaultPalette[paletteIndex % defaultPalette.length];
-          paletteIndex++;
-        } else {
-          color = { r: 255, g: 255, b: 255, a: 255 };
-        }
+        const color = randomColor();
         groupColors[key] = color;
         group.color = color;
 
@@ -286,7 +214,6 @@
     }
 
     async function clearColors() {
-      coloringMode = 'none';
       groupColors = {};
       groups.forEach(g => g.color = null);
       try {
@@ -295,11 +222,13 @@
       renderTable();
     }
 
-    async function selectAndZoomGroup(group) {
-      const modelObjectIds = [{
-        modelId: group.modelId,
-        objectRuntimeIds: group.objectIds
-      }];
+    async function selectSelectedGroups() {
+      if (selectedGroups.length === 0) return;
+
+      const modelObjectIds = selectedGroups.map(g => ({
+        modelId: g.modelId,
+        objectRuntimeIds: g.objectIds
+      }));
 
       try {
         await tcApi.viewer.setSelection({ modelObjectIds }, "set");
@@ -307,11 +236,6 @@
       } catch (e) {
         debug('Select/zoom error: ' + e.message);
       }
-    }
-
-    async function zoomToSelected() {
-      if (!selectedGroup) return;
-      await selectAndZoomGroup(selectedGroup);
     }
 
     function sortTable() {
@@ -349,10 +273,10 @@
             <img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon" alt="Expand">
           </td>
           <td class="center">${group.mark}</td>
-          <td class="numeric">${group.commonStartX === '' ? '<span class="empty-cell">--</span>' : group.commonStartX}</td>
-          <td class="numeric">${group.commonStartY === '' ? '<span class="empty-cell">--</span>' : group.commonStartY}</td>
-          <td class="numeric">${group.commonEndX === '' ? '<span class="empty-cell">--</span>' : group.commonEndX}</td>
-          <td class="numeric">${group.commonEndY === '' ? '<span class="empty-cell">--</span>' : group.commonEndY}</td>
+          <td class="numeric">${group.commonStartX !== '' ? Math.round(group.commonStartX) : '<span class="empty-cell">--</span>'}</td>
+          <td class="numeric">${group.commonStartY !== '' ? Math.round(group.commonStartY) : '<span class="empty-cell">--</span>'}</td>
+          <td class="numeric">${group.commonEndX !== '' ? Math.round(group.commonEndX) : '<span class="empty-cell">--</span>'}</td>
+          <td class="numeric">${group.commonEndY !== '' ? Math.round(group.commonEndY) : '<span class="empty-cell">--</span>'}</td>
           <td class="center">${group.diameter || '<span class="empty-cell">--</span>'}</td>
           <td>${group.shape || '<span class="empty-cell">--</span>'}</td>
           <td class="numeric">${group.length}</td>
@@ -370,9 +294,10 @@
           } else {
             tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
             groupTr.classList.add('selected');
-            selectedGroup = group;
+            selectedGroups = [group];
+            document.getElementById('selectGroups').disabled = false;
             document.getElementById('labelSelected').disabled = false;
-            selectAndZoomGroup(group);
+            selectSelectedGroups();
           }
         };
         tbody.appendChild(groupTr);
@@ -385,10 +310,10 @@
             childTr.innerHTML = `
               <td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});"></td>
               <td class="center gray-bg">${group.mark}</td>
-              <td class="numeric">${bar.startX === '' ? '<span class="empty-cell">--</span>' : bar.startX}</td>
-              <td class="numeric">${bar.startY === '' ? '<span class="empty-cell">--</span>' : bar.startY}</td>
-              <td class="numeric">${bar.endX === '' ? '<span class="empty-cell">--</span>' : bar.endX}</td>
-              <td class="numeric">${bar.endY === '' ? '<span class="empty-cell">--</span>' : bar.endY}</td>
+              <td class="numeric">${bar.startX !== '' ? Math.round(bar.startX) : '<span class="empty-cell">--</span>'}</td>
+              <td class="numeric">${bar.startY !== '' ? Math.round(bar.startY) : '<span class="empty-cell">--</span>'}</td>
+              <td class="numeric">${bar.endX !== '' ? Math.round(bar.endX) : '<span class="empty-cell">--</span>'}</td>
+              <td class="numeric">${bar.endY !== '' ? Math.round(bar.endY) : '<span class="empty-cell">--</span>'}</td>
               <td class="center gray-bg">${group.diameter || '<span class="empty-cell">--</span>'}</td>
               <td class="gray-bg">${group.shape || '<span class="empty-cell">--</span>'}</td>
               <td class="numeric gray-bg">${group.length}</td>
@@ -399,9 +324,10 @@
               tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
               groupTr.classList.add('selected');
               childTr.classList.add('selected');
-              selectedGroup = group;
+              selectedGroups = [group];
+              document.getElementById('selectGroups').disabled = false;
               document.getElementById('labelSelected').disabled = false;
-              selectAndZoomGroup(group);
+              selectSelectedGroups();
             };
             tbody.appendChild(childTr);
           });
@@ -413,14 +339,15 @@
       debug('=== REFRESH STARTED ===');
       await clearMarkups();
       groups = [];
-      selectedGroup = null;
+      selectedGroups = [];
       expandedGroups = new Set();
+      document.getElementById('selectGroups').disabled = true;
       document.getElementById('labelSelected').disabled = true;
       document.getElementById('labelAll').disabled = true;
       document.getElementById('clear').disabled = true;
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="10">Processing...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11">Processing...</td></tr>';
 
       try {
         debug('Fetching selection...');
@@ -514,56 +441,47 @@
         debug('Refresh completed');
       } catch (err) {
         debug('ERROR: ' + err.message);
-        tbody.innerHTML = `<tr><td colspan="10">Error: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
         document.getElementById('status').classList.add('error');
       }
       debug('=== REFRESH ENDED ===');
     }
 
-    // Menu popup
-    const menuPopup = document.getElementById('menuPopup');
+    document.querySelectorAll('th[data-sort]').forEach(th => {
+      th.onclick = () => {
+        const col = th.dataset.sort;
+        const existing = sortColumns.findIndex(s => s.col === col);
+        let newDir = 'asc';
 
-    document.getElementById('menuButton').onclick = (e) => {
-      e.stopPropagation();
-      menuPopup.style.display = menuPopup.style.display === 'block' ? 'none' : 'block';
-    };
+        if (existing !== -1) {
+          const currentDir = sortColumns[existing].dir;
+          if (currentDir === 'asc') {
+            sortColumns[existing].dir = 'desc';
+          } else {
+            sortColumns.splice(existing, 1);
+          }
+        } else {
+          sortColumns.unshift({ col, dir: 'asc' });
+        }
 
-    document.addEventListener('click', () => {
-      menuPopup.style.display = 'none';
+        document.querySelectorAll('th').forEach(h => h.className = '');
+        sortColumns.forEach(s => {
+          const header = document.querySelector(`th[data-sort="${s.col}"]`);
+          if (header) header.className = 'sorted-' + s.dir;
+        });
+
+        sortTable();
+      };
     });
 
-    document.getElementById('colorRandom').onclick = () => {
-      if (coloringMode === 'random') {
-        coloringMode = 'none';
-        clearColors();
-      } else {
-        coloringMode = 'random';
-        applyColoring('random');
-      }
-      document.getElementById('colorRandom').classList.toggle('active', coloringMode === 'random');
-      document.getElementById('colorPalette').classList.toggle('active', false);
-    };
-
-    document.getElementById('colorPalette').onclick = () => {
-      if (coloringMode === 'palette') {
-        coloringMode = 'none';
-        clearColors();
-      } else {
-        coloringMode = 'palette';
-        applyColoring('palette');
-      }
-      document.getElementById('colorPalette').classList.toggle('active', coloringMode === 'palette');
-      document.getElementById('colorRandom').classList.toggle('active', false);
-    };
-
-    document.getElementById('clearColorsBtn').onclick = clearColors;
-
     document.getElementById('refresh').onclick = processRebar;
+    document.getElementById('colorGroups').onclick = colorGroups;
+    document.getElementById('clearColors').onclick = clearColors;
+    document.getElementById('selectGroups').onclick = selectSelectedGroups;
     document.getElementById('labelSelected').onclick = labelSelectedGroups;
     document.getElementById('labelAll').onclick = labelAllGroups;
     document.getElementById('clear').onclick = clearMarkups;
-    document.getElementById('zoomCenter').onclick = zoomToSelected;
 
     init();
   </script>
