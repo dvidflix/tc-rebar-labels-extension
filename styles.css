@@ -5,7 +5,7 @@ body {
   background: #f9f9f9;
 }
 
-/* Header - white with black text/icons */
+/* Header */
 .header {
   display: flex;
   justify-content: space-between;
@@ -48,6 +48,74 @@ body {
   height: 20px;
 }
 
+/* Dropdown: View content for */
+.dropdown-container {
+  position: relative;
+  display: inline-block;
+  margin-left: 20px;
+}
+
+.dropdown-button {
+  background: #fff;
+  border: 1px solid #ccc;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 180px;
+  justify-content: space-between;
+}
+
+.dropdown-button::after {
+  content: "▼";
+  font-size: 10px;
+}
+
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: white;
+  border: 1px solid #ddd;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  min-width: 100%;
+  z-index: 1000;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dropdown-menu.show {
+  display: block;
+}
+
+.dropdown-item {
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dropdown-item:hover {
+  background: #f0f0f0;
+}
+
+.dropdown-item.selected {
+  background: #e6f0ff;
+  font-weight: 600;
+}
+
+.dropdown-item.selected::after {
+  content: "✓";
+  color: #0066cc;
+  font-weight: bold;
+}
+
 /* Sort Popup */
 .sort-popup {
   display: none;
@@ -86,7 +154,7 @@ body {
   background: #f0f0f0;
 }
 
-/* Table - 24px group rows, 18px child rows */
+/* Table */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -125,13 +193,11 @@ tr.child-row {
 tr.child-row:hover { background: #f5f5f5; }
 tr.child-row.selected { background: #d0e4ff !important; }
 
-/* First column color */
 .expand-cell {
   text-align: center;
   width: 40px;
 }
 
-/* Child row repeated columns - toned down gray */
 .child-row td:nth-child(2),
 .child-row td:nth-child(7),
 .child-row td:nth-child(8),
@@ -141,18 +207,15 @@ tr.child-row.selected { background: #d0e4ff !important; }
   color: #666;
 }
 
-/* Alignment */
 .numeric { text-align: right; }
 .center { text-align: center; }
 
-/* Expand icon */
 .expand-icon {
   width: 16px;
   height: 16px;
   vertical-align: middle;
 }
 
-/* Empty cells - "--" text */
 .empty-cell {
   color: #999;
   font-style: italic;
@@ -170,6 +233,9 @@ tr.child-row.selected { background: #d0e4ff !important; }
   color: #008000;
   margin-bottom: 10px;
 }
+
+.status.good { color: #008000; }
+.status.error { color: #d00; }
 
 .instructions {
   font-size: 14px;

@@ -13,6 +13,17 @@
     <div class="header-title">
       <img src="markup-text-active.svg" alt="Icon" class="title-icon">
       Rebar Labels
+      <!-- New Dropdown: View content for -->
+      <div class="dropdown-container">
+        <button id="viewContentDropdown" class="dropdown-button">
+          Visible objects
+        </button>
+        <div id="viewContentMenu" class="dropdown-menu">
+          <div class="dropdown-item" data-value="all">All objects</div>
+          <div class="dropdown-item" data-value="selected">Selected objects</div>
+          <div class="dropdown-item selected" data-value="visible">Visible objects</div>
+        </div>
+      </div>
     </div>
     <div class="header-actions">
       <button id="refresh" title="Refresh Rebar Data">
@@ -80,6 +91,41 @@
   <pre id="debugConsole">Debug messages will appear here...</pre>
 
   <script>
+    // Dropdown functionality
+    const dropdownBtn = document.getElementById('viewContentDropdown');
+    const dropdownMenu = document.getElementById('viewContentMenu');
+
+    dropdownBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdownMenu.classList.toggle('show');
+    });
+
+    document.querySelectorAll('#viewContentMenu .dropdown-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+
+        // Update selected item
+        document.querySelectorAll('#viewContentMenu .dropdown-item').forEach(i => i.classList.remove('selected'));
+        item.classList.add('selected');
+
+        // Update button text
+        dropdownBtn.textContent = item.textContent.trim();
+
+        // You can use this value later for filtering logic
+        const value = item.getAttribute('data-value');
+        console.log('View mode changed to:', value);
+        // e.g., window.currentViewMode = value;
+
+        dropdownMenu.classList.remove('show');
+      });
+    });
+
+    // Close dropdown when clicking elsewhere
+    document.addEventListener('click', () => {
+      dropdownMenu.classList.remove('show');
+    });
+
+    // Main application script
     let tcApi;
     let groups = [];
     let markupIds = [];
@@ -264,7 +310,6 @@
         for (const {col, dir} of sortColumns) {
           let A = a[col] ?? '';
           let B = b[col] ?? '';
-          // Convert to number if possible (for X/Y coordinates)
           const numA = parseFloat(A);
           const numB = parseFloat(B);
           if (!isNaN(numA) && !isNaN(numB)) {
@@ -287,7 +332,6 @@
       groups.forEach(group => {
         const color = group.color || { r: 255, g: 255, b: 255 };
 
-        // Group row
         const groupTr = document.createElement('tr');
         groupTr.className = 'group-row';
         groupTr.innerHTML = `
@@ -323,7 +367,6 @@
         };
         tbody.appendChild(groupTr);
 
-        // Child rows if expanded
         if (expandedGroups.has(group.key)) {
           group.individualBars.forEach(bar => {
             const childTr = document.createElement('tr');
