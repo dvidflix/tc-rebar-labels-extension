@@ -1,0 +1,119 @@
+body { 
+  font-family: Arial, sans-serif; 
+  margin: 0; 
+  padding: 0; 
+  background: #f9f9f9; 
+}
+
+/* Header - Trimble Connect style */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #1a5fb4;
+  color: white;
+  padding: 12px 20px;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.header-actions button {
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.header-actions button:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+.header-actions button img {
+  height: 20px;
+  filter: brightness(0) invert(1);
+}
+
+/* Status and instructions */
+.status {
+  padding: 10px 20px;
+  font-weight: bold;
+  color: #008000;
+}
+
+.instructions {
+  padding: 0 20px 10px;
+  font-size: 14px;
+  color: #555;
+}
+
+/* Template */
+.template-label {
+  padding: 0 20px;
+  display: block;
+}
+
+/* Actions */
+.actions {
+  padding: 10px 20px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Table */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  font-size: 14px;
+}
+
+th, td {
+  border: 1px solid #ddd;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+th {
+  background: #1a5fb4;
+  color: white;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  font-weight: normal;
+}
+
+th:hover { background: #144a8a; }
+
+th.sorted-asc::after { content: " ▲"; font-size: 12px; }
+th.sorted-desc::after { content: " ▼"; font-size: 12px; }
+
+tr:hover { background: #f5f5f5; cursor: pointer; }
+tr.selected { background: #d0e4ff !important; }
+
+.colorSwatch {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  border: 1px solid #000;
+  vertical-align: middle;
+}
+
+/* Debug Console */
+.debug-title {
+  padding: 20px 20px 0;
+  margin: 0;
+}
+
+#debugConsole {
+  margin: 20px;
+  background: #000;
+  color: #0f0;
+  padding: 10px;
+  font-family: monospace;
+  height: 200px;
+  overflow-y: auto;
+  border-radius: 4px;
+}

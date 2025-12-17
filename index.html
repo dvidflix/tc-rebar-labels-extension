@@ -5,49 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rebar Labels Extension</title>
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
-    h1 { color: #1a5fb4; }
-    button { padding: 10px 16px; margin: 5px; background: #1a5fb4; color: white; border: none; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
-    button:hover { background: #144a8a; }
-    button:disabled { background: #aaa; cursor: not-allowed; }
-    button img { height: 20px; vertical-align: middle; }
-    textarea { padding: 8px; margin: 10px 0; width: 100%; box-sizing: border-box; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-    th { background: #1a5fb4; color: white; cursor: pointer; user-select: none; position: relative; }
-    th:hover { background: #144a8a; }
-    th.sorted-asc::after { content: " ▲"; }
-    th.sorted-desc::after { content: " ▼"; }
-    tr:hover { background: #f0f5ff; cursor: pointer; }
-    tr.selected { background: #d0e4ff !important; }
-    .status { margin: 10px 0; font-weight: bold; }
-    .good { color: #008000; }
-    .error { color: #d00000; }
-    #debugConsole { background: #000; color: #0f0; padding: 10px; font-family: monospace; height: 250px; overflow-y: auto; margin-top: 20px; border-radius: 4px; }
-    .colorSwatch { width: 20px; height: 20px; display: inline-block; border: 1px solid #000; vertical-align: middle; }
-  </style>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <h1>Rebar Labels Extension</h1>
+  <div class="header">
+    <div class="header-title">Rebar Labels Extension</div>
+    <div class="header-actions">
+      <button id="refresh" title="Refresh Rebar Data">
+        <img src="https://raw.githubusercontent.com/dvidflix/tc-rebar-labels-extension/main/refresh.png" alt="Refresh">
+      </button>
+    </div>
+  </div>
+
   <div class="status" id="status">Initializing...</div>
 
-  <p><strong>Instructions:</strong> Select one or more yellow rebar bars → click the refresh button.</p>
+  <div class="instructions">
+    Select one or more yellow rebar bars → click the refresh icon above.
+  </div>
 
-  <label><strong>Label Template</strong> (recommended):</label>
-  <textarea id="template" rows="3">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
-  <p><small>Other useful: {Size}, {Length}, {Rebar mark}, {Shape code}, {End Point X}, {End Point Y}, {Grade}</small></p>
+  <label class="template-label">
+    <strong>Label Template:</strong>
+    <textarea id="template" rows="2">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
+  </label>
 
-  <button id="refresh">
-    <img src="https://raw.githubusercontent.com/dvidflix/tc-rebar-labels-extension/main/refresh.png" alt="Refresh">
-    Refresh Rebar Data
-  </button>
-  <button id="colorGroups">Color Groups (Random)</button>
-  <button id="clearColors">Clear Colors</button>
-  <button id="selectGroups" disabled>Select & Zoom Selected Groups</button>
-  <button id="labelSelected" disabled>Label Selected Groups</button>
-  <button id="labelAll" disabled>Label All Groups</button>
-  <button id="clear" disabled>Clear Labels</button>
+  <div class="actions">
+    <button id="colorGroups">Color Groups (Random)</button>
+    <button id="clearColors">Clear Colors</button>
+    <button id="selectGroups" disabled>Select & Zoom Selected Groups</button>
+    <button id="labelSelected" disabled>Label Selected Groups</button>
+    <button id="labelAll" disabled>Label All Groups</button>
+    <button id="clear" disabled>Clear Labels</button>
+  </div>
 
   <table id="rebarTable">
     <thead>
@@ -67,7 +55,7 @@
     <tbody></tbody>
   </table>
 
-  <h3>Debug Console</h3>
+  <h3 class="debug-title">Debug Console</h3>
   <pre id="debugConsole">Debug messages will appear here...</pre>
 
   <script>
@@ -76,7 +64,7 @@
     let markupIds = [];
     let selectedGroups = [];
     let groupColors = {};
-    let sortColumns = []; // array of {col, dir}
+    let sortColumns = [{ col: 'startX', dir: 'asc' }, { col: 'startY', dir: 'asc' }];
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -92,7 +80,7 @@
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
         debug('Connected successfully');
-        document.getElementById('status').textContent = 'Connected! Select rebar bars and click the refresh button.';
+        document.getElementById('status').textContent = 'Connected! Select rebar bars and click the refresh icon.';
         document.getElementById('status').classList.add('good');
       } catch (err) {
         debug('Connection error: ' + err.message);
@@ -241,8 +229,6 @@
     }
 
     function sortTable() {
-      if (sortColumns.length === 0) return;
-
       groups.sort((a, b) => {
         for (const {col, dir} of sortColumns) {
           let A = a[col] ?? '';
@@ -345,7 +331,7 @@
           });
         }
 
-        if (allRebar.length === 0) throw new Error('No rebar found.');
+        if (allRebar.length === 0) throw new Error('No rebar elements found.');
 
         const groupMap = {};
         for (const item of allRebar) {
@@ -354,10 +340,10 @@
           const mark = flat['Serial number'] || flat['Rebar mark'] || flat['Group position number'] || 'Unknown';
           const dia = flat['Size'] || '';
           const shape = flat['Shape'] || flat['Shape code'] || '';
-          const startX = Number(flat['Start Point X'] || 0);
-          const startY = Number(flat['Start Point Y'] || 0);
-          const endX = Number(flat['End Point X'] || 0);
-          const endY = Number(flat['End Point Y'] || 0);
+          const startX = flat['Start Point X'] || '';
+          const startY = flat['Start Point Y'] || '';
+          const endX = flat['End Point X'] || '';
+          const endY = flat['End Point Y'] || '';
           const len = Math.round(Number(flat['Length'] || 0));
 
           const key = `${mark}|${dia}|${len}|${shape}|${item.modelId}`;
@@ -385,7 +371,6 @@
           g.quantity = g.objectIds.length;
         });
 
-        // Default sort: Start X asc, then Start Y asc
         sortColumns = [{ col: 'startX', dir: 'asc' }, { col: 'startY', dir: 'asc' }];
         sortTable();
 
@@ -405,12 +390,10 @@
       debug('=== REFRESH ENDED ===');
     }
 
-    // Multi-column sorting
     document.querySelectorAll('th[data-sort]').forEach(th => {
       th.onclick = () => {
         const col = th.dataset.sort;
 
-        // Find if this column is already in sortColumns
         const existing = sortColumns.findIndex(s => s.col === col);
         let newDir = 'asc';
 
@@ -418,13 +401,11 @@
           newDir = sortColumns[existing].dir === 'asc' ? 'desc' : 'asc';
           sortColumns[existing].dir = newDir;
         } else {
-          // Add as primary sort
           sortColumns.unshift({ col, dir: 'asc' });
         }
 
-        // Update header arrows
         document.querySelectorAll('th').forEach(h => h.className = '');
-        sortColumns.forEach((s, i) => {
+        sortColumns.forEach(s => {
           const header = document.querySelector(`th[data-sort="${s.col}"]`);
           if (header) header.className = 'sorted-' + s.dir;
         });
