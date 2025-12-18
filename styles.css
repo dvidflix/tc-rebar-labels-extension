@@ -133,7 +133,7 @@ body {
 .sort-column, .sort-direction { flex: 1; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
 
 /* Table */
-table { width: 100%; border-collapse: collapse; background: white; font-size: 14px; }
+table { width: 100%; border-collapse: collapse; background: white; font-size: 14px; margin-top: 20px; }
 th, td { border: 1px solid #c8c8c8; padding: 6px 8px; text-align: center; }
 th { background: #e0e1e9; color: #333; cursor: pointer; user-select: none; font-weight: 600; }
 th:hover { background: #d0d1d9; }
@@ -166,17 +166,16 @@ tr.child-row { background: white; height: 24px; font-size: 13px; }
 /* Buttons */
 .header-actions button { background: transparent; border: none; cursor: pointer; padding: 8px; border-radius: 4px; }
 .header-actions button:hover { background: #f0f0f0; }
-.header-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 .header-actions button img { height: 20px; }
 
-/* Footer & Debug */
+/* Footer */
 .footer-info { padding: 20px; background: #fff; border-top: 1px solid #ddd; }
 .status { font-weight: bold; color: #008000; margin-bottom: 10px; }
 .status.good { color: #008000; }
 .status.error { color: #d00; }
 .instructions { font-size: 14px; color: #555; margin-bottom: 10px; }
-.template-label { display: block; }
 
+/* Debug */
 .debug-title { padding: 20px 20px 0; margin: 0; }
 #debugConsole {
   margin: 20px;
