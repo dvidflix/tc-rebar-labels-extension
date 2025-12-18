@@ -69,8 +69,8 @@
         <th>#</th>
         <th data-sort="mark">Mark</th>
         <th data-sort="startX">Start X</th>
-        <th data-sort="endX">End X</th>
         <th data-sort="startY">Start Y</th>
+        <th data-sort="endX">End X</th>
         <th data-sort="endY">End Y</th>
         <th data-sort="diameter">Diam.</th>
         <th data-sort="shape">Shape code</th>
@@ -101,12 +101,12 @@
     let groups = [];
     let markupIds = [];
     let selectedGroups = new Set();
-    let groupColors = {};
+    let groupColors = {}; // { groupKey: {r,g,b,a} }
     let sortColumns = [];
     let expandedGroups = new Set();
     let coloringActive = false;
     let currentViewMode = 'selected';
-    let lastSelectedRow = null; // For Shift selection
+    let lastSelectedRow = null;
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -208,35 +208,56 @@
       return flat;
     }
 
+    // Improved Color Groups - reliable and clean reset
     async function toggleColorGroups() {
       coloringActive = !coloringActive;
-      document.getElementById('colorGroups').classList.toggle('active', coloringActive);
-      coloringActive ? await colorGroups() : await clearColors();
+      const button = document.getElementById('colorGroups');
+      button.classList.toggle('active', coloringActive);
+
+      if (coloringActive) {
+        await applyGroupColors();
+      } else {
+        await resetAllColors();
+      }
     }
 
-    async function colorGroups() {
-      try { await tcApi.viewer.setObjectState([]); } catch (e) {}
+    async function applyGroupColors() {
+      if (!tcApi || groups.length === 0) return;
+
       groupColors = {};
+
       for (const group of groups) {
-        const color = { r: Math.floor(Math.random() * 256), g: Math.floor(Math.random() * 256), b: Math.floor(Math.random() * 256), a: 255 };
+        const color = {
+          r: Math.floor(Math.random() * 256),
+          g: Math.floor(Math.random() * 256),
+          b: Math.floor(Math.random() * 256),
+          a: 255
+        };
         groupColors[group.key] = color;
         group.color = color;
+
         try {
           await tcApi.viewer.setObjectState({
             modelId: group.modelId,
-            objectIds: group.objectIds,
-            color: color
-          });
-        } catch (e) {}
+            objectIds: group.objectIds
+          }, { color });
+        } catch (e) {
+          debug('Color apply error for group: ' + e.message);
+        }
       }
       renderTable();
     }
 
-    async function clearColors() {
-      groupColors = {};
-      groups.forEach(g => g.color = null);
-      try { await tcApi.viewer.setObjectState([]); } catch (e) {}
-      renderTable();
+    async function resetAllColors() {
+      if (!tcApi) return;
+      try {
+        await tcApi.viewer.setObjectState(undefined, { color: "reset" });
+        groupColors = {};
+        groups.forEach(g => g.color = null);
+        renderTable();
+      } catch (e) {
+        debug('Reset colors error: ' + e.message);
+      }
     }
 
     async function selectAndZoomGroup(group) {
@@ -357,7 +378,6 @@
       updateLabelButtonState();
     }
 
-    // Perfect multi-selection using old proven logic
     function handleRowClick(e, group, rowElement) {
       if (e.target.classList.contains('expand-icon') || e.target.closest('.expand-icon')) {
         e.stopPropagation();
@@ -374,11 +394,8 @@
         const start = Math.min(currentIndex, lastIndex);
         const end = Math.max(currentIndex, lastIndex);
 
-        // Clear all
-        groupRows.forEach(r => r.classList.remove('selected'));
-        document.querySelectorAll('tr.child-row').forEach(r => r.classList.remove('selected'));
+        document.querySelectorAll('#rebarTable tbody tr').forEach(tr => tr.classList.remove('selected'));
 
-        // Select range
         for (let i = start; i <= end; i++) {
           const tr = groupRows[i];
           tr.classList.add('selected');
@@ -394,19 +411,16 @@
           else c.classList.remove('selected');
         });
       } else {
-        // Single selection
         document.querySelectorAll('#rebarTable tbody tr').forEach(tr => tr.classList.remove('selected'));
         rowElement.classList.add('selected');
         const gKey = rowElement.dataset.groupKey;
         document.querySelectorAll(`tr.child-row[data-group-key="${gKey}"]`).forEach(c => c.classList.add('selected'));
       }
 
-      // Update lastSelectedRow for next Shift click
       if (rowElement.classList.contains('group-row') && rowElement.classList.contains('selected')) {
         lastSelectedRow = rowElement;
       }
 
-      // Rebuild selectedGroups from DOM
       selectedGroups.clear();
       document.querySelectorAll('tr.group-row.selected').forEach(tr => {
         const gKey = tr.dataset.groupKey;
@@ -520,7 +534,7 @@
       return props.properties?.some(p => p.name === 'Tekla Reinforcement - Bending List' || p.name === 'ICOS Rebar');
     }
 
-    // Sort popup (unchanged — already fixed for mouse interaction)
+    // Sort popup (unchanged)
     const sortPopup = document.getElementById('sortPopup');
     const sortLevels = document.getElementById('sortLevels');
     const addSortBtn = document.getElementById('addSort');
