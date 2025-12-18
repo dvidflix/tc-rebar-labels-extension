@@ -208,7 +208,7 @@
       return flat;
     }
 
-    // Fixed Color Groups - immediate update in table and 3D view
+    // Fixed Color Groups - immediate update
     async function toggleColorGroups() {
       coloringActive = !coloringActive;
       const button = document.getElementById('colorGroups');
@@ -249,13 +249,8 @@
 
       try {
         await tcApi.viewer.setObjectState(stateChanges);
-        // Immediate table update + force viewer render
         renderTable();
-        requestAnimationFrame(() => {
-          if (tcApi && tcApi.viewer && tcApi.viewer.render) {
-            tcApi.viewer.render();
-          }
-        });
+        requestAnimationFrame(() => tcApi.viewer.render?.());
       } catch (e) {
         debug('Batch color apply error: ' + e.message);
       }
@@ -268,11 +263,7 @@
         groupColors = {};
         groups.forEach(g => g.color = null);
         renderTable();
-        requestAnimationFrame(() => {
-          if (tcApi && tcApi.viewer && tcApi.viewer.render) {
-            tcApi.viewer.render();
-          }
-        });
+        requestAnimationFrame(() => tcApi.viewer.render?.());
       } catch (e) {
         debug('Reset colors error: ' + e.message);
       }
@@ -290,16 +281,21 @@
       if (selectedGroups.size > 0) await selectAndZoomGroup([...selectedGroups][0]);
     }
 
+    // Fixed sorting - Start/End X/Y as strings
     function sortTable() {
       groups.sort((a, b) => {
         for (const {col, dir} of sortColumns) {
           let A = a[col] ?? '';
           let B = b[col] ?? '';
-          if (col === 'shape') {
+
+          if (['startX', 'startY', 'endX', 'endY'].includes(col)) {
+            // String sort for coordinates
+            if (A !== B) return A.localeCompare(B, undefined, {numeric: true}) * (dir === 'asc' ? 1 : -1);
+          } else if (col === 'shape') {
             if (A !== B) return A.localeCompare(B) * (dir === 'asc' ? 1 : -1);
           } else {
-            const numA = (A === '' || A === '--') ? Infinity : parseFloat(A);
-            const numB = (B === '' || B === '--') ? Infinity : parseFloat(B);
+            const numA = parseFloat(A) || 0;
+            const numB = parseFloat(B) || 0;
             if (numA !== numB) return (numA < numB ? -1 : 1) * (dir === 'asc' ? 1 : -1);
           }
         }
@@ -313,20 +309,9 @@
       tbody.innerHTML = '';
 
       let totalBars = 0;
-      let maxStartX = -Infinity, maxStartY = -Infinity;
-      let maxEndX = -Infinity, maxEndY = -Infinity;
 
       groups.forEach(group => {
         totalBars += group.quantity;
-        ['commonStartX', 'commonStartY', 'commonEndX', 'commonEndY'].forEach(coord => {
-          const val = parseFloat(group[coord]);
-          if (!isNaN(val)) {
-            if (coord === 'commonStartX') maxStartX = Math.max(maxStartX, val);
-            if (coord === 'commonStartY') maxStartY = Math.max(maxStartY, val);
-            if (coord === 'commonEndX') maxEndX = Math.max(maxEndX, val);
-            if (coord === 'commonEndY') maxEndY = Math.max(maxEndY, val);
-          }
-        });
 
         const color = group.color || { r: 255, g: 255, b: 255 };
         const isSelected = selectedGroups.has(group);
@@ -375,16 +360,16 @@
         }
       });
 
+      // Clean totals row - no Max for Start/End
       if (groups.length > 0) {
         const totalsTr = document.createElement('tr');
         totalsTr.className = 'totals-row';
         totalsTr.innerHTML = `
-          <td colspan="1"><strong>Total</strong></td>
-          <td class="center"><strong>${groups.length} groups</strong></td>
-          <td class="numeric">${isFinite(maxStartX) ? 'Max ' + maxStartX : '--'}</td>
-          <td class="numeric">${isFinite(maxStartY) ? 'Max ' + maxStartY : '--'}</td>
-          <td class="numeric">${isFinite(maxEndX) ? 'Max ' + maxEndX : '--'}</td>
-          <td class="numeric">${isFinite(maxEndY) ? 'Max ' + maxEndY : '--'}</td>
+          <td colspan="2"><strong>Total</strong></td>
+          <td class="numeric">--</td>
+          <td class="numeric">--</td>
+          <td class="numeric">--</td>
+          <td class="numeric">--</td>
           <td class="center">--</td>
           <td>--</td>
           <td class="numeric">--</td>
@@ -396,6 +381,7 @@
       updateLabelButtonState();
     }
 
+    // Fixed multi-selection
     function handleRowClick(e, group, rowElement) {
       if (e.target.classList.contains('expand-icon') || e.target.closest('.expand-icon')) {
         e.stopPropagation();
