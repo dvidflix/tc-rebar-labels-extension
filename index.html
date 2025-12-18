@@ -101,7 +101,7 @@
     let groups = [];
     let markupIds = [];
     let selectedGroups = new Set();
-    let groupColors = {}; // { groupKey: {r,g,b,a} }
+    let groupColors = {};
     let sortColumns = [];
     let expandedGroups = new Set();
     let coloringActive = false;
@@ -208,7 +208,7 @@
       return flat;
     }
 
-    // Fixed Color Groups - batched single call
+    // Fixed Color Groups - immediate update in table and 3D view
     async function toggleColorGroups() {
       coloringActive = !coloringActive;
       const button = document.getElementById('colorGroups');
@@ -249,7 +249,13 @@
 
       try {
         await tcApi.viewer.setObjectState(stateChanges);
+        // Immediate table update + force viewer render
         renderTable();
+        requestAnimationFrame(() => {
+          if (tcApi && tcApi.viewer && tcApi.viewer.render) {
+            tcApi.viewer.render();
+          }
+        });
       } catch (e) {
         debug('Batch color apply error: ' + e.message);
       }
@@ -262,6 +268,11 @@
         groupColors = {};
         groups.forEach(g => g.color = null);
         renderTable();
+        requestAnimationFrame(() => {
+          if (tcApi && tcApi.viewer && tcApi.viewer.render) {
+            tcApi.viewer.render();
+          }
+        });
       } catch (e) {
         debug('Reset colors error: ' + e.message);
       }
@@ -279,21 +290,17 @@
       if (selectedGroups.size > 0) await selectAndZoomGroup([...selectedGroups][0]);
     }
 
-    // Fixed sorting - empty values to bottom
     function sortTable() {
       groups.sort((a, b) => {
         for (const {col, dir} of sortColumns) {
           let A = a[col] ?? '';
           let B = b[col] ?? '';
-
           if (col === 'shape') {
             if (A !== B) return A.localeCompare(B) * (dir === 'asc' ? 1 : -1);
           } else {
-            // Empty or '--' to bottom
-            const valA = (A === '' || A === '--') ? Infinity : parseFloat(A);
-            const valB = (B === '' || B === '--') ? Infinity : parseFloat(B);
-
-            if (valA !== valB) return (valA < valB ? -1 : 1) * (dir === 'asc' ? 1 : -1);
+            const numA = (A === '' || A === '--') ? Infinity : parseFloat(A);
+            const numB = (B === '' || B === '--') ? Infinity : parseFloat(B);
+            if (numA !== numB) return (numA < numB ? -1 : 1) * (dir === 'asc' ? 1 : -1);
           }
         }
         return 0;
