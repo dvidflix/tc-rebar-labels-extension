@@ -33,25 +33,30 @@
       <button id="refresh" title="Refresh Rebar Data">
         <img src="update.svg" alt="Refresh">
       </button>
-      <button id="colorGroups" class="toggle-button" title="Color Groups">
+      <button id="settingsButton" title="Settings">
+        <img src="menu.svg" alt="Settings">
+      </button>
+      <button id="colorGroups" class="toggle-button" title="Apply Colors">
         <img src="background.svg" alt="Color Groups">
-        <span id="colorModeText"> (Random)</span>
       </button>
       <button id="sortButton" title="Sort">
         <img src="sort.svg" alt="Sort">
       </button>
-      <button id="labelSelected" disabled title="Label Selected Group(s)">
-        <img src="tag.svg" alt="Label Selected">
-      </button>
-      <button id="labelAll" disabled title="Label All Groups">
-        <img src="tag_solid.svg" alt="Label All">
-      </button>
-      <button id="clear" disabled title="Clear Labels">
-        <img src="tag_solid-disabled.svg" alt="Clear Labels">
-      </button>
-      <button id="zoomCenter" title="Zoom to Selected">
-        <img src="zoom-center.svg" alt="Zoom Center">
-      </button>
+    </div>
+  </div>
+
+  <!-- Settings Popup -->
+  <div id="settingsPopup" class="settings-popup">
+    <div class="settings-header">
+      <span>Settings</span>
+      <button id="closeSettings">×</button>
+    </div>
+    <div class="settings-content">
+      <label>Coloring Mode:</label>
+      <select id="colorModeSelect">
+        <option value="random">Random</option>
+        <option value="rule">Rule-based</option>
+      </select>
     </div>
   </div>
 
@@ -88,10 +93,6 @@
     <div class="instructions">
       Select one or more rebar groups → use buttons above.
     </div>
-    <label class="template-label">
-      <strong>Label Template:</strong>
-      <textarea id="template" rows="2">[ {Serial number} ] H {Start Point X} ; V {Start Point Y}</textarea>
-    </label>
   </div>
 
   <h3 class="debug-title">Debug Console</h3>
@@ -101,16 +102,15 @@
   <script>
     let tcApi;
     let groups = [];
-    let markupIds = [];
     let selectedGroups = new Set();
-    let groupColors = {}; // { groupKey: {r,g,b,a} }
-    let groupColorReasons = {}; // { groupKey: string }
+    let groupColors = {};
+    let groupColorReasons = {};
     let sortColumns = [];
     let expandedGroups = new Set();
     let coloringActive = false;
     let currentViewMode = 'selected';
     let lastSelectedRow = null;
-    let useRuleBasedColoring = false; // false = Random, true = Rule-based (prefab vs loose/in-situ)
+    let colorMode = 'random'; // 'random' or 'rule'
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -120,7 +120,7 @@
       debugConsole.scrollTop = debugConsole.scrollHeight;
     }
 
-    // Views Dropdown (unchanged)
+    // Views Dropdown
     const viewsDropdown = document.getElementById('viewsDropdown');
     const viewsMenu = document.getElementById('viewsMenu');
     const viewsText = document.getElementById('viewsText');
@@ -150,82 +150,39 @@
       viewsMenu.classList.remove('show');
     });
 
+    // Settings Popup
+    const settingsButton = document.getElementById('settingsButton');
+    const settingsPopup = document.getElementById('settingsPopup');
+    const closeSettings = document.getElementById('closeSettings');
+    const colorModeSelect = document.getElementById('colorModeSelect');
+
+    settingsButton.onclick = (e) => {
+      e.stopPropagation();
+      settingsPopup.style.display = 'block';
+      colorModeSelect.value = colorMode;
+    };
+
+    closeSettings.onclick = () => {
+      settingsPopup.style.display = 'none';
+    };
+
+    colorModeSelect.onchange = () => {
+      colorMode = colorModeSelect.value;
+      if (coloringActive) applyGroupColors(); // re-apply with new mode
+    };
+
+    document.addEventListener('click', () => {
+      settingsPopup.style.display = 'none';
+    });
+
+    settingsPopup.addEventListener('click', (e) => e.stopPropagation());
+
     async function init() {
       try {
         tcApi = await TrimbleConnectWorkspace.connect(window.parent);
         debug('Connected successfully');
       } catch (err) {
         debug('Connection error: ' + err.message);
-      }
-    }
-
-    async function clearMarkups() {
-      for (const id of markupIds) {
-        try { await tcApi.viewer.markup.removeMarkup(id); } catch (e) {}
-      }
-      markupIds = [];
-    }
-
-    async function addLabel(group) {
-      const flat = flattenProps(group.sampleProps);
-      let text = document.getElementById('template').value;
-      for (const [key, value] of Object.entries(flat)) {
-        text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
-      }
-      text = text.replace(/\{[^}]+\}/g, '').trim() || 'Rebar';
-
-      try {
-        const textPos = { x: 0, y: 0, z: 5.0 };
-        const anchor = { x: 0, y: 0, z: 0 };
-        const textId = await tcApi.viewer.markup.addTextMarkup({
-          text, position: textPos, color: { r: 0, g: 0, b: 0 },
-          backgroundColor: { r: 255, g: 255, b: 255, a: 0.95 },
-          fontSize: 48, padding: 12, borderWidth: 2, borderColor: { r: 0, g: 0, b: 0 }
-        });
-        markupIds.push(textId);
-        const arrowId = await tcApi.viewer.markup.addArrowMarkup({
-          start: textPos, end: anchor, color: { r: 0, g: 0, b: 0 }, width: 6
-        });
-        markupIds.push(arrowId);
-      } catch (e) { debug('Label error: ' + e.message); }
-    }
-
-    async function labelSelectedGroups() {
-      if (selectedGroups.size === 0) return;
-      await clearMarkups();
-      for (const group of selectedGroups) await addLabel(group);
-    }
-
-    async function labelAllGroups() {
-      await clearMarkups();
-      for (const group of groups) await addLabel(group);
-    }
-
-    function flattenProps(props) {
-      const flat = {};
-      if (!props?.properties) return flat;
-      props.properties.forEach(pset => {
-        if (pset.properties) pset.properties.forEach(prop => {
-          if (prop.value !== undefined) flat[prop.name] = prop.value;
-        });
-      });
-      return flat;
-    }
-
-    // Updated toggle: switches between Random and Rule-based coloring
-    async function toggleColorGroups() {
-      coloringActive = !coloringActive;
-      const button = document.getElementById('colorGroups');
-      const modeText = document.getElementById('colorModeText');
-      button.classList.toggle('active', coloringActive);
-
-      if (coloringActive) {
-        useRuleBasedColoring = !useRuleBasedColoring; // toggle mode
-        modeText.textContent = useRuleBasedColoring ? ' (Rule-based)' : ' (Random)';
-        await applyGroupColors();
-      } else {
-        await resetAllColors();
-        modeText.textContent = ' (Random)';
       }
     }
 
@@ -238,8 +195,7 @@
       for (const group of groups) {
         let color, reason;
 
-        if (!useRuleBasedColoring) {
-          // Random coloring
+        if (colorMode === 'random') {
           color = {
             r: Math.floor(Math.random() * 256),
             g: Math.floor(Math.random() * 256),
@@ -248,7 +204,6 @@
           };
           reason = 'Random';
         } else {
-          // Rule-based coloring (same logic as BYLOR Tools ModelBuilder)
           const flat = flattenProps(group.sampleProps);
           const subassembly = flat['Subassembly -1'] || '';
           const diameter = flat['Size'] || 'unknown';
@@ -256,7 +211,6 @@
           const isLooseOrInsitu = /LOOSE|SITU/i.test(subassembly);
 
           if (isLooseOrInsitu) {
-            // Light colors for loose/in-situ (from COLORS_SIZE)
             const lightMap = {
               '8':  [128, 0, 255],
               '10': [88, 145, 163],
@@ -271,7 +225,6 @@
             color = { r: rgb[0], g: rgb[1], b: rgb[2], a: 255 };
             reason = `Loose/In-Situ (Dia ${diameter})`;
           } else {
-            // Dark colors for prefab/assembly (from COLORS_SIZE_DARK)
             const darkMap = {
               '8':  [0, 0, 127],
               '10': [0, 17, 35],
@@ -282,7 +235,7 @@
               '32': [127, 0, 0],
               '40': [0, 70, 99]
             };
-            const rgb = darkMap[diameter] || [200, 200, 200]; // fallback gray
+            const rgb = darkMap[diameter] || [200, 200, 200];
             color = { r: rgb[0], g: rgb[1], b: rgb[2], a: 255 };
             reason = `Prefab/Assembly (Dia ${diameter})`;
           }
@@ -298,7 +251,7 @@
             objectIds: group.objectIds
           }, { color });
         } catch (e) {
-          debug('Color apply error for group: ' + e.message);
+          debug('Color apply error: ' + e.message);
         }
       }
       renderTable();
@@ -317,16 +270,24 @@
       }
     }
 
+    async function toggleColorGroups() {
+      coloringActive = !coloringActive;
+      const button = document.getElementById('colorGroups');
+      button.classList.toggle('active', coloringActive);
+
+      if (coloringActive) {
+        await applyGroupColors();
+      } else {
+        await resetAllColors();
+      }
+    }
+
     async function selectAndZoomGroup(group) {
       const modelObjectIds = [{ modelId: group.modelId, objectRuntimeIds: group.objectIds }];
       try {
         await tcApi.viewer.setSelection({ modelObjectIds }, "set");
         await tcApi.viewer.zoomTo({ modelObjectIds });
       } catch (e) {}
-    }
-
-    async function zoomToSelected() {
-      if (selectedGroups.size > 0) await selectAndZoomGroup([...selectedGroups][0]);
     }
 
     function sortTable() {
@@ -352,23 +313,12 @@
       tbody.innerHTML = '';
 
       let totalBars = 0;
-      let maxStartX = -Infinity, maxStartY = -Infinity;
-      let maxEndX = -Infinity, maxEndY = -Infinity;
 
       groups.forEach(group => {
         totalBars += group.quantity;
-        ['commonStartX', 'commonStartY', 'commonEndX', 'commonEndY'].forEach(coord => {
-          const val = parseFloat(group[coord]);
-          if (!isNaN(val)) {
-            if (coord === 'commonStartX') maxStartX = Math.max(maxStartX, val);
-            if (coord === 'commonStartY') maxStartY = Math.max(maxStartY, val);
-            if (coord === 'commonEndX') maxEndX = Math.max(maxEndX, val);
-            if (coord === 'commonEndY') maxEndY = Math.max(maxEndY, val);
-          }
-        });
 
         const color = group.color || { r: 255, g: 255, b: 255 };
-        const reason = groupColorReasons[group.key] || (coloringActive ? (useRuleBasedColoring ? 'Rule-based' : 'Random') : 'None');
+        const reason = groupColorReasons[group.key] || (coloringActive ? (colorMode === 'rule' ? 'Rule-based' : 'Random') : '--');
         const isSelected = selectedGroups.has(group);
 
         const groupTr = document.createElement('tr');
@@ -421,12 +371,8 @@
         const totalsTr = document.createElement('tr');
         totalsTr.className = 'totals-row';
         totalsTr.innerHTML = `
-          <td colspan="1"><strong>Total</strong></td>
-          <td class="center"><strong>${groups.length} groups</strong></td>
-          <td class="numeric">${isFinite(maxStartX) ? 'Max ' + maxStartX : '--'}</td>
-          <td class="numeric">${isFinite(maxStartY) ? 'Max ' + maxStartY : '--'}</td>
-          <td class="numeric">${isFinite(maxEndX) ? 'Max ' + maxEndX : '--'}</td>
-          <td class="numeric">${isFinite(maxEndY) ? 'Max ' + maxEndY : '--'}</td>
+          <td colspan="2"><strong>Total</strong></td>
+          <td colspan="4"></td>
           <td class="center">--</td>
           <td>--</td>
           <td class="numeric">--</td>
@@ -435,8 +381,6 @@
         `;
         tbody.appendChild(totalsTr);
       }
-
-      updateLabelButtonState();
     }
 
     function handleRowClick(e, group, rowElement) {
@@ -489,24 +433,26 @@
         if (grp) selectedGroups.add(grp);
       });
 
-      updateLabelButtonState();
       if (selectedGroups.size === 1) selectAndZoomGroup([...selectedGroups][0]);
     }
 
-    function updateLabelButtonState() {
-      document.getElementById('labelSelected').disabled = selectedGroups.size === 0;
-      document.getElementById('labelAll').disabled = groups.length === 0;
-      document.getElementById('clear').disabled = markupIds.length === 0;
+    function flattenProps(props) {
+      const flat = {};
+      if (!props?.properties) return flat;
+      props.properties.forEach(pset => {
+        if (pset.properties) pset.properties.forEach(prop => {
+          if (prop.value !== undefined) flat[prop.name] = prop.value;
+        });
+      });
+      return flat;
     }
 
     async function processRebar() {
       debug('=== REFRESH STARTED ===');
-      await clearMarkups();
       groups = [];
       selectedGroups.clear();
       lastSelectedRow = null;
       expandedGroups = new Set();
-      updateLabelButtonState();
 
       const tbody = document.querySelector('#rebarTable tbody');
       tbody.innerHTML = '<tr><td colspan="11">Processing...</td></tr>';
@@ -580,11 +526,9 @@
         });
 
         sortTable();
-        document.getElementById('labelAll').disabled = false;
         document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${objects.length} bars.`;
         document.getElementById('status').classList.add('good');
 
-        // Re-apply coloring if it was active
         if (coloringActive) await applyGroupColors();
       } catch (err) {
         debug('ERROR: ' + err.message);
@@ -598,7 +542,7 @@
       return props.properties?.some(p => p.name === 'Tekla Reinforcement - Bending List' || p.name === 'ICOS Rebar' || p.name === 'ICOS BBS');
     }
 
-    // Sort popup remains unchanged...
+    // Sort popup
     const sortPopup = document.getElementById('sortPopup');
     const sortLevels = document.getElementById('sortLevels');
     const addSortBtn = document.getElementById('addSort');
@@ -663,10 +607,6 @@
 
     document.getElementById('refresh').onclick = processRebar;
     document.getElementById('colorGroups').onclick = toggleColorGroups;
-    document.getElementById('labelSelected').onclick = labelSelectedGroups;
-    document.getElementById('labelAll').onclick = labelAllGroups;
-    document.getElementById('clear').onclick = clearMarkups;
-    document.getElementById('zoomCenter').onclick = zoomToSelected;
 
     init();
   </script>
