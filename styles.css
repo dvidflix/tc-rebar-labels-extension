@@ -187,3 +187,37 @@ tr.child-row { background: white; height: 24px; font-size: 13px; }
   overflow-y: auto;
   border-radius: 4px;
 }
+
+/* Additional styles for popups */
+.settings-popup, .sort-popup {
+  position: absolute;
+  background: white;
+  border: 1px solid #ccc;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1000;
+  padding: 12px;
+  border-radius: 4px;
+  min-width: 200px;
+  display: none;
+}
+.settings-header, .sort-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.settings-content label {
+  display: block;
+  margin-bottom: 8px;
+}
+.settings-content select {
+  width: 100%;
+  padding: 6px;
+}
+#closeSettings {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+}

@@ -90,7 +90,8 @@
       <label>Coloring Mode:</label>
       <select id="colorModeSelect">
         <option value="random">Random</option>
-        <option value="rule">Rule-based</option>
+        <option value="deliveries">Rule-based (Deliveries)</option>
+        <option value="services">Rule-based (Services)</option>
       </select>
     </div>
   </div>
@@ -148,7 +149,21 @@
     let coloringActive = false;
     let currentViewMode = 'selected';
     let lastSelectedRow = null;
-    let colorMode = 'random'; // 'random' or 'rule'
+    let colorMode = 'random'; // 'random', 'deliveries', 'services'
+
+    // Predefined Services palette (40 colors from REBARGROUPS_COLORS)
+    const servicesPalette = [
+      [0, 0, 255], [0, 255, 0], [0, 255, 255], [255, 0, 0], [255, 0, 255],
+      [191, 127, 255], [127, 191, 255], [127, 255, 191], [191, 255, 127], [255, 127, 191],
+      [255, 191, 127], [0, 127, 255], [127, 0, 255], [127, 255, 0], [0, 255, 127],
+      [255, 127, 0], [255, 0, 127], [159, 127, 255], [127, 159, 255], [127, 255, 159],
+      [159, 255, 127], [255, 127, 159], [255, 159, 127], [0, 191, 223], [27, 118, 97],
+      [191, 223, 223], [223, 0, 191], [223, 191, 223], [0, 223, 255], [223, 0, 255],
+      [200, 150, 80], [0, 255, 223], [205, 182, 188], [255, 0, 223], [223, 191, 95],
+      [191, 223, 95], [191, 95, 223], [223, 95, 191], [95, 191, 223], [95, 223, 191]
+    ];
+
+    let servicesPaletteIndex = 0;
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -209,6 +224,7 @@
 
     colorModeSelect.onchange = () => {
       colorMode = colorModeSelect.value;
+      servicesPaletteIndex = 0; // Reset index when changing mode
       if (coloringActive) applyGroupColors();
     };
 
@@ -232,6 +248,7 @@
 
       groupColors = {};
       groupColorReasons = {};
+      servicesPaletteIndex = 0; // Reset for consistent cycling
 
       for (const group of groups) {
         let color, reason;
@@ -244,7 +261,7 @@
             a: 255
           };
           reason = 'Random';
-        } else {
+        } else if (colorMode === 'deliveries') {
           const flat = flattenProps(group.sampleProps);
           const subassembly = flat['Subassembly -1'] || '';
           const diameter = flat['Size'] || 'unknown';
@@ -264,7 +281,7 @@
             };
             const rgb = lightMap[diameter] || [255, 255, 255];
             color = { r: rgb[0], g: rgb[1], b: rgb[2], a: 255 };
-            reason = `Loose/In-Situ (Dia ${diameter})`;
+            reason = `Rule-based (Deliveries) - Loose/In-Situ (Dia ${diameter})`;
           } else {
             const darkMap = {
               '8':  [0, 0, 127],
@@ -278,8 +295,14 @@
             };
             const rgb = darkMap[diameter] || [200, 200, 200];
             color = { r: rgb[0], g: rgb[1], b: rgb[2], a: 255 };
-            reason = `Prefab/Assembly (Dia ${diameter})`;
+            reason = `Rule-based (Deliveries) - Prefab/Assembly (Dia ${diameter})`;
           }
+        } else if (colorMode === 'services') {
+          // Cycle through the full 40-color Services palette
+          const rgb = servicesPalette[servicesPaletteIndex % servicesPalette.length];
+          color = { r: rgb[0], g: rgb[1], b: rgb[2], a: 255 };
+          reason = 'Rule-based (Services) - Palette color';
+          servicesPaletteIndex++;
         }
 
         groupColors[group.key] = color;
@@ -317,6 +340,7 @@
       button.classList.toggle('active', coloringActive);
 
       if (coloringActive) {
+        servicesPaletteIndex = 0; // Reset palette index
         await applyGroupColors();
       } else {
         await resetAllColors();
@@ -355,7 +379,7 @@
         totalBars += group.quantity;
 
         const color = group.color || { r: 255, g: 255, b: 255 };
-        const reason = groupColorReasons[group.key] || (coloringActive ? (colorMode === 'rule' ? 'Rule-based' : 'Random') : '--');
+        const reason = groupColorReasons[group.key] || (coloringActive ? colorMode.charAt(0).toUpperCase() + colorMode.slice(1) : '--');
         const isSelected = selectedGroups.has(group);
 
         const groupTr = document.createElement('tr');
@@ -562,7 +586,6 @@
         groups.forEach(g => {
           g.quantity = g.objectIds.length;
 
-          // Common values for group row
           const startsH = new Set(g.individualBars.map(b => b.h1));
           g.h1 = startsH.size === 1 ? g.individualBars[0].h1 : '';
           const startsV = new Set(g.individualBars.map(b => b.v1));
@@ -578,7 +601,6 @@
           g.z2 = endsZ.size === 1 ? g.individualBars[0].z2 : '';
         });
 
-        // Default sort: Diameter (desc for larger first), then Subassembly -1 (asc)
         sortColumns = [
           { col: 'diameter', dir: 'desc' },
           { col: 'subassembly', dir: 'asc' }
@@ -601,7 +623,7 @@
       return props.properties?.some(p => p.name === 'Tekla Reinforcement - Bending List' || p.name === 'ICOS Rebar' || p.name === 'ICOS BBS');
     }
 
-    // Sort popup (right-aligned)
+    // Sort popup remains unchanged
     const sortButton = document.getElementById('sortButton');
     const sortPopup = document.getElementById('sortPopup');
     const sortLevels = document.getElementById('sortLevels');
