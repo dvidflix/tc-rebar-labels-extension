@@ -288,7 +288,7 @@
       });
     });
 
-    // Close popups only on true outside clicks
+    // Improved outside click handler - only close if click is truly outside
     document.addEventListener('click', (e) => {
       document.querySelectorAll('.popup').forEach(popup => {
         if (popup.style.display === 'block' && !popup.contains(e.target)) {
@@ -297,8 +297,8 @@
       });
     });
 
-    // Stop propagation on header buttons and popups
-    document.querySelectorAll('.header-actions button, .popup, .popup *').forEach(el => {
+    // Stop propagation on all interactive elements in header and popups
+    document.querySelectorAll('.header-actions button, .popup, .popup *, .views-dropdown-button, .views-dropdown-menu').forEach(el => {
       el.addEventListener('click', (e) => e.stopPropagation());
     });
 
