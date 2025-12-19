@@ -33,8 +33,9 @@
       <button id="refresh" title="Refresh Rebar Data">
         <img src="update.svg" alt="Refresh">
       </button>
-      <button id="colorGroups" class="toggle-button" title="Color Groups (Random)">
+      <button id="colorGroups" class="toggle-button" title="Color Groups">
         <img src="background.svg" alt="Color Groups">
+        <span id="colorModeText"> (Random)</span>
       </button>
       <button id="sortButton" title="Sort">
         <img src="sort.svg" alt="Sort">
@@ -76,6 +77,7 @@
         <th data-sort="shape">Shape code</th>
         <th data-sort="length">Length</th>
         <th data-sort="quantity">Count</th>
+        <th>Color Reason</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -102,11 +104,13 @@
     let markupIds = [];
     let selectedGroups = new Set();
     let groupColors = {}; // { groupKey: {r,g,b,a} }
+    let groupColorReasons = {}; // { groupKey: string }
     let sortColumns = [];
     let expandedGroups = new Set();
     let coloringActive = false;
     let currentViewMode = 'selected';
     let lastSelectedRow = null;
+    let useRuleBasedColoring = false; // false = Random, true = Rule-based (prefab vs loose/in-situ)
 
     const debugConsole = document.getElementById('debugConsole');
 
@@ -116,7 +120,7 @@
       debugConsole.scrollTop = debugConsole.scrollHeight;
     }
 
-    // Views Dropdown
+    // Views Dropdown (unchanged)
     const viewsDropdown = document.getElementById('viewsDropdown');
     const viewsMenu = document.getElementById('viewsMenu');
     const viewsText = document.getElementById('viewsText');
@@ -208,16 +212,20 @@
       return flat;
     }
 
-    // Improved Color Groups - reliable and clean reset
+    // Updated toggle: switches between Random and Rule-based coloring
     async function toggleColorGroups() {
       coloringActive = !coloringActive;
       const button = document.getElementById('colorGroups');
+      const modeText = document.getElementById('colorModeText');
       button.classList.toggle('active', coloringActive);
 
       if (coloringActive) {
+        useRuleBasedColoring = !useRuleBasedColoring; // toggle mode
+        modeText.textContent = useRuleBasedColoring ? ' (Rule-based)' : ' (Random)';
         await applyGroupColors();
       } else {
         await resetAllColors();
+        modeText.textContent = ' (Random)';
       }
     }
 
@@ -225,15 +233,63 @@
       if (!tcApi || groups.length === 0) return;
 
       groupColors = {};
+      groupColorReasons = {};
 
       for (const group of groups) {
-        const color = {
-          r: Math.floor(Math.random() * 256),
-          g: Math.floor(Math.random() * 256),
-          b: Math.floor(Math.random() * 256),
-          a: 255
-        };
+        let color, reason;
+
+        if (!useRuleBasedColoring) {
+          // Random coloring
+          color = {
+            r: Math.floor(Math.random() * 256),
+            g: Math.floor(Math.random() * 256),
+            b: Math.floor(Math.random() * 256),
+            a: 255
+          };
+          reason = 'Random';
+        } else {
+          // Rule-based coloring (same logic as BYLOR Tools ModelBuilder)
+          const flat = flattenProps(group.sampleProps);
+          const subassembly = flat['Subassembly -1'] || '';
+          const diameter = flat['Size'] || 'unknown';
+
+          const isLooseOrInsitu = /LOOSE|SITU/i.test(subassembly);
+
+          if (isLooseOrInsitu) {
+            // Light colors for loose/in-situ (from COLORS_SIZE)
+            const lightMap = {
+              '8':  [128, 0, 255],
+              '10': [88, 145, 163],
+              '12': [206, 150, 45],
+              '16': [0, 85, 255],
+              '20': [255, 83, 255],
+              '25': [85, 255, 85],
+              '32': [255, 0, 0],
+              '40': [0, 198, 227]
+            };
+            const rgb = lightMap[diameter] || [255, 255, 255];
+            color = { r: rgb[0], g: rgb[1], b: rgb[2], a: 255 };
+            reason = `Loose/In-Situ (Dia ${diameter})`;
+          } else {
+            // Dark colors for prefab/assembly (from COLORS_SIZE_DARK)
+            const darkMap = {
+              '8':  [0, 0, 127],
+              '10': [0, 17, 35],
+              '12': [78, 22, 0],
+              '16': [0, 0, 127],
+              '20': [127, 0, 127],
+              '25': [0, 127, 0],
+              '32': [127, 0, 0],
+              '40': [0, 70, 99]
+            };
+            const rgb = darkMap[diameter] || [200, 200, 200]; // fallback gray
+            color = { r: rgb[0], g: rgb[1], b: rgb[2], a: 255 };
+            reason = `Prefab/Assembly (Dia ${diameter})`;
+          }
+        }
+
         groupColors[group.key] = color;
+        groupColorReasons[group.key] = reason;
         group.color = color;
 
         try {
@@ -253,6 +309,7 @@
       try {
         await tcApi.viewer.setObjectState(undefined, { color: "reset" });
         groupColors = {};
+        groupColorReasons = {};
         groups.forEach(g => g.color = null);
         renderTable();
       } catch (e) {
@@ -311,6 +368,7 @@
         });
 
         const color = group.color || { r: 255, g: 255, b: 255 };
+        const reason = groupColorReasons[group.key] || (coloringActive ? (useRuleBasedColoring ? 'Rule-based' : 'Random') : 'None');
         const isSelected = selectedGroups.has(group);
 
         const groupTr = document.createElement('tr');
@@ -329,6 +387,7 @@
           <td>${group.shape || '--'}</td>
           <td class="numeric">${group.length}</td>
           <td class="center">${group.quantity}</td>
+          <td class="color-reason">${reason}</td>
         `;
 
         groupTr.addEventListener('click', (e) => handleRowClick(e, group, groupTr));
@@ -350,6 +409,7 @@
               <td class="gray-bg">${group.shape || '--'}</td>
               <td class="numeric gray-bg">${group.length}</td>
               <td class="center gray-bg">${group.quantity}</td>
+              <td class="color-reason gray-bg">${reason}</td>
             `;
             childTr.addEventListener('click', (e) => handleRowClick(e, group, childTr));
             tbody.appendChild(childTr);
@@ -371,6 +431,7 @@
           <td>--</td>
           <td class="numeric">--</td>
           <td class="center"><strong>${totalBars}</strong></td>
+          <td></td>
         `;
         tbody.appendChild(totalsTr);
       }
@@ -448,7 +509,7 @@
       updateLabelButtonState();
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="10">Processing...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11">Processing...</td></tr>';
 
       try {
         let objects = [];
@@ -522,19 +583,22 @@
         document.getElementById('labelAll').disabled = false;
         document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${objects.length} bars.`;
         document.getElementById('status').classList.add('good');
+
+        // Re-apply coloring if it was active
+        if (coloringActive) await applyGroupColors();
       } catch (err) {
         debug('ERROR: ' + err.message);
-        tbody.innerHTML = `<tr><td colspan="10">Error: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
         document.getElementById('status').classList.add('error');
       }
     }
 
     function hasRebarProps(props) {
-      return props.properties?.some(p => p.name === 'Tekla Reinforcement - Bending List' || p.name === 'ICOS Rebar');
+      return props.properties?.some(p => p.name === 'Tekla Reinforcement - Bending List' || p.name === 'ICOS Rebar' || p.name === 'ICOS BBS');
     }
 
-    // Sort popup (unchanged)
+    // Sort popup remains unchanged...
     const sortPopup = document.getElementById('sortPopup');
     const sortLevels = document.getElementById('sortLevels');
     const addSortBtn = document.getElementById('addSort');
