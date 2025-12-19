@@ -5,43 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rebar Labels</title>
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght=400;600&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap">
   <link rel="stylesheet" href="styles.css">
-  <style>
-    /* Additional styles for popups */
-    .settings-popup, .sort-popup {
-      position: absolute;
-      background: white;
-      border: 1px solid #ccc;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      z-index: 1000;
-      padding: 12px;
-      border-radius: 4px;
-      min-width: 200px;
-      display: none;
-    }
-    .settings-header, .sort-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-      font-weight: 600;
-    }
-    .settings-content label {
-      display: block;
-      margin-bottom: 8px;
-    }
-    .settings-content select {
-      width: 100%;
-      padding: 6px;
-    }
-    #closeSettings {
-      background: none;
-      border: none;
-      font-size: 18px;
-      cursor: pointer;
-    }
-  </style>
 </head>
 <body>
   <div class="header">
@@ -53,38 +18,60 @@
           <img src="chevron-down.svg" class="dropdown-arrow" alt="▼">
         </button>
         <div id="viewsMenu" class="views-dropdown-menu">
-          <div class="views-item selected" data-value="selected">
-            Selected objects
-            <img src="check-bold.svg" class="checkmark selected" alt="✓">
-          </div>
-          <div class="views-item" data-value="visible">
-            Visible objects
-            <img src="check-bold.svg" class="checkmark" alt="✓">
-          </div>
+          <div class="views-item selected" data-value="selected">Selected objects <img src="check-bold.svg" class="checkmark selected" alt="✓"></div>
+          <div class="views-item" data-value="visible">Visible objects <img src="check-bold.svg" class="checkmark" alt="✓"></div>
         </div>
       </div>
     </div>
     <div class="header-actions">
-      <button id="refresh" title="Refresh Rebar Data">
-        <img src="update.svg" alt="Refresh">
-      </button>
-      <button id="sortButton" title="Sort">
-        <img src="sort.svg" alt="Sort">
-      </button>
-      <button id="colorGroups" class="toggle-button" title="Apply Colors">
-        <img src="background.svg" alt="Color Groups">
-      </button>
-      <button id="settingsButton" title="Settings">
-        <img src="menu.svg" alt="Settings">
-      </button>
+      <button id="refresh" title="Refresh"><img src="update.svg" alt="Refresh"></button>
+      <button id="filterButton" title="Filter"><img src="filter.svg" alt="Filter"></button>
+      <button id="groupButton" title="Group"><img src="group.svg" alt="Group"></button>
+      <button id="hideColumnsButton" title="Hide columns"><img src="hide-columns.svg" alt="Hide columns"></button>
+      <button id="sortButton" title="Sort"><img src="sort.svg" alt="Sort"></button>
+      <button id="colorGroups" class="toggle-button" title="Apply Colors"><img src="background.svg" alt="Color Groups"></button>
+      <button id="settingsButton" title="Settings"><img src="menu.svg" alt="Settings"></button>
     </div>
   </div>
 
-  <!-- Settings Popup (right-aligned) -->
-  <div id="settingsPopup" class="settings-popup">
-    <div class="settings-header">
+  <!-- Hide Columns Popup -->
+  <div id="hideColumnsPopup" class="popup">
+    <div class="popup-header">
+      <span>Hide columns</span>
+      <button class="popup-close">×</button>
+    </div>
+    <div id="columnList"></div>
+  </div>
+
+  <!-- Filter Popup -->
+  <div id="filterPopup" class="popup">
+    <div class="popup-header">
+      <span>Filter</span>
+      <button class="popup-close">×</button>
+    </div>
+    <div id="filterRules"></div>
+    <div class="add-btn" id="addFilter">+ Add filter</div>
+  </div>
+
+  <!-- Group Popup -->
+  <div id="groupPopup" class="popup">
+    <div class="popup-header">
+      <span>Grouped by <span id="groupCount">0</span> column<span id="groupPlural">s</span></span>
+      <button class="popup-close">×</button>
+    </div>
+    <div id="groupRules"></div>
+    <div class="add-btn" id="addGroup">+ Add group</div>
+    <div style="margin-top:12px;">
+      <button id="collapseAll">Collapse all</button>
+      <button id="expandAll">Expand all</button>
+    </div>
+  </div>
+
+  <!-- Settings Popup -->
+  <div id="settingsPopup" class="popup">
+    <div class="popup-header">
       <span>Settings</span>
-      <button id="closeSettings">×</button>
+      <button class="popup-close">×</button>
     </div>
     <div class="settings-content">
       <label>Coloring Mode:</label>
@@ -96,9 +83,9 @@
     </div>
   </div>
 
-  <!-- Sort Popup (right-aligned) -->
-  <div id="sortPopup" class="sort-popup">
-    <div class="sort-header">
+  <!-- Sort Popup -->
+  <div id="sortPopup" class="popup">
+    <div class="popup-header">
       <span class="sort-count">1 Sort</span>
       <button id="addSort" class="add-sort-btn">+ Add sort</button>
     </div>
@@ -109,18 +96,18 @@
     <thead>
       <tr>
         <th>#</th>
-        <th data-sort="mark">Mark</th>
-        <th data-sort="subassembly">Subassembly -1</th>
-        <th data-sort="diameter">Diam.</th>
-        <th data-sort="shape">Shape code</th>
-        <th data-sort="h1">H1</th>
-        <th data-sort="v1">V1</th>
-        <th data-sort="z1">Z1</th>
-        <th data-sort="h2">H2</th>
-        <th data-sort="v2">V2</th>
-        <th data-sort="z2">Z2</th>
-        <th data-sort="length">Length</th>
-        <th data-sort="quantity">Count</th>
+        <th data-col="mark">Mark</th>
+        <th data-col="h1">H1</th>
+        <th data-col="v1">V1</th>
+        <th data-col="z1">Z1</th>
+        <th data-col="h2">H2</th>
+        <th data-col="v2">V2</th>
+        <th data-col="z2">Z2</th>
+        <th data-col="subassembly">Subassembly -1</th>
+        <th data-col="diameter">Diam.</th>
+        <th data-col="shape">Shape code</th>
+        <th data-col="length">Length</th>
+        <th data-col="quantity">Count</th>
         <th>Color Reason</th>
       </tr>
     </thead>
@@ -129,9 +116,7 @@
 
   <div class="footer-info">
     <div class="status" id="status"></div>
-    <div class="instructions">
-      Select one or more rebar groups → use buttons above.
-    </div>
+    <div class="instructions">Select one or more rebar groups → use buttons above.</div>
   </div>
 
   <h3 class="debug-title">Debug Console</h3>
@@ -149,9 +134,8 @@
     let coloringActive = false;
     let currentViewMode = 'selected';
     let lastSelectedRow = null;
-    let colorMode = 'random'; // 'random', 'deliveries', 'services'
+    let colorMode = 'random';
 
-    // Predefined Services palette (40 colors from REBARGROUPS_COLORS)
     const servicesPalette = [
       [0, 0, 255], [0, 255, 0], [0, 255, 255], [255, 0, 0], [255, 0, 255],
       [191, 127, 255], [127, 191, 255], [127, 255, 191], [191, 255, 127], [255, 127, 191],
@@ -162,7 +146,6 @@
       [200, 150, 80], [0, 255, 223], [205, 182, 188], [255, 0, 223], [223, 191, 95],
       [191, 223, 95], [191, 95, 223], [223, 95, 191], [95, 191, 223], [95, 223, 191]
     ];
-
     let servicesPaletteIndex = 0;
 
     const debugConsole = document.getElementById('debugConsole');
@@ -173,7 +156,27 @@
       debugConsole.scrollTop = debugConsole.scrollHeight;
     }
 
-    // Views Dropdown (unchanged)
+    const columnConfig = [
+      { key: 'expand', name: '#', visible: true },
+      { key: 'mark', name: 'Mark', visible: true },
+      { key: 'h1', name: 'H1', visible: true },
+      { key: 'v1', name: 'V1', visible: true },
+      { key: 'z1', name: 'Z1', visible: true },
+      { key: 'h2', name: 'H2', visible: true },
+      { key: 'v2', name: 'V2', visible: true },
+      { key: 'z2', name: 'Z2', visible: true },
+      { key: 'subassembly', name: 'Subassembly -1', visible: true },
+      { key: 'diameter', name: 'Diam.', visible: true },
+      { key: 'shape', name: 'Shape code', visible: true },
+      { key: 'length', name: 'Length', visible: true },
+      { key: 'quantity', name: 'Count', visible: true },
+      { key: 'reason', name: 'Color Reason', visible: true }
+    ];
+
+    let filters = [];
+    let groupBy = [];
+
+    // Views Dropdown
     const viewsDropdown = document.getElementById('viewsDropdown');
     const viewsMenu = document.getElementById('viewsMenu');
     const viewsText = document.getElementById('viewsText');
@@ -203,7 +206,7 @@
       viewsMenu.classList.remove('show');
     });
 
-    // Settings Popup (right-aligned)
+    // Settings Popup
     const settingsButton = document.getElementById('settingsButton');
     const settingsPopup = document.getElementById('settingsPopup');
     const closeSettings = document.getElementById('closeSettings');
@@ -224,15 +227,230 @@
 
     colorModeSelect.onchange = () => {
       colorMode = colorModeSelect.value;
-      servicesPaletteIndex = 0; // Reset index when changing mode
+      servicesPaletteIndex = 0;
       if (coloringActive) applyGroupColors();
     };
 
-    document.addEventListener('click', () => {
-      settingsPopup.style.display = 'none';
+    // Hide Columns
+    const hideColumnsButton = document.getElementById('hideColumnsButton');
+    const hideColumnsPopup = document.getElementById('hideColumnsPopup');
+    const columnList = document.getElementById('columnList');
+
+    hideColumnsButton.onclick = (e) => {
+      e.stopPropagation();
+      columnList.innerHTML = '';
+      columnConfig.forEach(col => {
+        if (col.key === 'expand' || col.key === 'reason') return;
+        const div = document.createElement('div');
+        div.className = 'column-item';
+        div.innerHTML = `
+          <span>${col.name}</span>
+          <label class="toggle-switch">
+            <input type="checkbox" ${col.visible ? 'checked' : ''} data-key="${col.key}">
+            <span class="slider"></span>
+          </label>
+        `;
+        columnList.appendChild(div);
+      });
+      const rect = hideColumnsButton.getBoundingClientRect();
+      hideColumnsPopup.style.top = rect.bottom + 'px';
+      hideColumnsPopup.style.right = (window.innerWidth - rect.right) + 'px';
+      hideColumnsPopup.style.display = 'block';
+    };
+
+    columnList.addEventListener('change', (e) => {
+      if (e.target.type === 'checkbox') {
+        const key = e.target.dataset.key;
+        const col = columnConfig.find(c => c.key === key);
+        if (col) col.visible = e.target.checked;
+        renderTable();
+      }
     });
 
-    settingsPopup.addEventListener('click', (e) => e.stopPropagation());
+    // Filter
+    const filterButton = document.getElementById('filterButton');
+    const filterPopup = document.getElementById('filterPopup');
+    const filterRules = document.getElementById('filterRules');
+
+    filterButton.onclick = (e) => {
+      e.stopPropagation();
+      renderFilterRules();
+      const rect = filterButton.getBoundingClientRect();
+      filterPopup.style.top = rect.bottom + 'px';
+      filterPopup.style.right = (window.innerWidth - rect.right) + 'px';
+      filterPopup.style.display = 'block';
+    };
+
+    function renderFilterRules() {
+      filterRules.innerHTML = '';
+      filters.forEach((f, i) => {
+        const div = document.createElement('div');
+        div.className = 'filter-rule';
+        div.innerHTML = `
+          <select class="filter-col">
+            ${columnConfig.filter(c => c.key !== 'expand' && c.key !== 'reason').map(c => 
+              `<option value="${c.key}" ${f.col===c.key?'selected':''}>${c.name}</option>`
+            ).join('')}
+          </select>
+          <select class="filter-op">
+            <option value="contains">contains</option>
+            <option value="noneof" ${f.op==='noneof'?'selected':''}>is none of</option>
+          </select>
+          <input type="text" class="filter-val" placeholder="Enter value" value="${f.val||''}" style="display:${f.op==='noneof'?'none':''}">
+          <div class="filter-tags" style="display:${f.op==='noneof'?'flex':'none'}"></div>
+          <button class="remove-filter">×</button>
+        `;
+        if (f.op === 'noneof' && f.tags) {
+          const tagsDiv = div.querySelector('.filter-tags');
+          f.tags.forEach(tag => {
+            const span = document.createElement('span');
+            span.className = 'tag';
+            span.innerHTML = `${tag} <span class="tag-remove">×</span>`;
+            tagsDiv.appendChild(span);
+          });
+        }
+        filterRules.appendChild(div);
+      });
+      if (filters.length === 0) filterRules.innerHTML = '<i>No filters</i>';
+    }
+
+    document.getElementById('addFilter').onclick = () => {
+      filters.push({ col: 'mark', op: 'contains', val: '' });
+      renderFilterRules();
+      renderTable();
+    };
+
+    filterRules.addEventListener('click', (e) => {
+      if (e.target.classList.contains('remove-filter')) {
+        const index = Array.from(filterRules.children).indexOf(e.target.closest('.filter-rule'));
+        filters.splice(index, 1);
+        renderFilterRules();
+        renderTable();
+      }
+      if (e.target.classList.contains('tag-remove')) {
+        const tagSpan = e.target.parentElement;
+        const tagsDiv = tagSpan.parentElement;
+        const rule = tagsDiv.closest('.filter-rule');
+        const index = Array.from(filterRules.children).indexOf(rule);
+        const tagText = tagSpan.textContent.trim().slice(0, -1);
+        filters[index].tags = filters[index].tags.filter(t => t !== tagText);
+        tagSpan.remove();
+        renderTable();
+      }
+    });
+
+    filterRules.addEventListener('change', (e) => {
+      const rule = e.target.closest('.filter-rule');
+      const index = Array.from(filterRules.children).indexOf(rule);
+      if (e.target.classList.contains('filter-col')) filters[index].col = e.target.value;
+      if (e.target.classList.contains('filter-op')) {
+        filters[index].op = e.target.value;
+        rule.querySelector('.filter-val').style.display = e.target.value === 'noneof' ? 'none' : '';
+        rule.querySelector('.filter-tags').style.display = e.target.value === 'noneof' ? 'flex' : 'none';
+        if (e.target.value === 'noneof') filters[index].tags = [];
+      }
+      renderTable();
+    });
+
+    filterRules.addEventListener('input', (e) => {
+      if (e.target.classList.contains('filter-val')) {
+        const rule = e.target.closest('.filter-rule');
+        const index = Array.from(filterRules.children).indexOf(rule);
+        filters[index].val = e.target.value;
+        renderTable();
+      }
+    });
+
+    filterRules.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.classList.contains('filter-val')) {
+        e.preventDefault();
+        const rule = e.target.closest('.filter-rule');
+        const index = Array.from(filterRules.children).indexOf(rule);
+        const val = e.target.value.trim();
+        if (val && filters[index].op === 'noneof') {
+          filters[index].tags = filters[index].tags || [];
+          if (!filters[index].tags.includes(val)) {
+            filters[index].tags.push(val);
+            const tagsDiv = rule.querySelector('.filter-tags');
+            const span = document.createElement('span');
+            span.className = 'tag';
+            span.innerHTML = `${val} <span class="tag-remove">×</span>`;
+            tagsDiv.appendChild(span);
+          }
+          e.target.value = '';
+          renderTable();
+        }
+      }
+    });
+
+    // Group by
+    const groupButton = document.getElementById('groupButton');
+    const groupPopup = document.getElementById('groupPopup');
+    const groupRules = document.getElementById('groupRules');
+    const groupCount = document.getElementById('groupCount');
+    const groupPlural = document.getElementById('groupPlural');
+
+    groupButton.onclick = (e) => {
+      e.stopPropagation();
+      renderGroupRules();
+      groupCount.textContent = groupBy.length;
+      groupPlural.textContent = groupBy.length === 1 ? '' : 's';
+      const rect = groupButton.getBoundingClientRect();
+      groupPopup.style.top = rect.bottom + 'px';
+      groupPopup.style.right = (window.innerWidth - rect.right) + 'px';
+      groupPopup.style.display = 'block';
+    };
+
+    function renderGroupRules() {
+      groupRules.innerHTML = '';
+      groupBy.forEach((col, i) => {
+        const div = document.createElement('div');
+        div.className = 'group-rule';
+        div.innerHTML = `
+          <select>
+            ${columnConfig.filter(c => c.key !== 'expand' && c.key !== 'reason').map(c => 
+              `<option value="${c.key}" ${col===c.key?'selected':''}>${c.name}</option>`
+            ).join('')}
+          </select>
+          <button class="remove-group">×</button>
+        `;
+        groupRules.appendChild(div);
+      });
+      if (groupBy.length === 0) groupRules.innerHTML = '<i>No grouping</i>';
+    }
+
+    document.getElementById('addGroup').onclick = () => {
+      groupBy.push('mark');
+      renderGroupRules();
+      groupCount.textContent = groupBy.length;
+      groupPlural.textContent = groupBy.length === 1 ? '' : 's';
+      renderTable();
+    };
+
+    groupRules.addEventListener('click', (e) => {
+      if (e.target.classList.contains('remove-group')) {
+        const index = Array.from(groupRules.children).indexOf(e.target.closest('.group-rule'));
+        groupBy.splice(index, 1);
+        renderGroupRules();
+        groupCount.textContent = groupBy.length;
+        groupPlural.textContent = groupBy.length === 1 ? '' : 's';
+        renderTable();
+      }
+    });
+
+    groupRules.addEventListener('change', (e) => {
+      const index = Array.from(groupRules.children).indexOf(e.target.closest('.group-rule'));
+      groupBy[index] = e.target.value;
+      renderTable();
+    });
+
+    document.getElementById('collapseAll').onclick = () => { expandedGroups.clear(); renderTable(); };
+    document.getElementById('expandAll').onclick = () => { groups.forEach(g => expandedGroups.add(g.key)); renderTable(); };
+
+    // Close all popups on outside click
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.popup').forEach(p => p.style.display = 'none');
+    });
 
     async function init() {
       try {
@@ -248,7 +466,7 @@
 
       groupColors = {};
       groupColorReasons = {};
-      servicesPaletteIndex = 0; // Reset for consistent cycling
+      servicesPaletteIndex = 0;
 
       for (const group of groups) {
         let color, reason;
@@ -298,7 +516,6 @@
             reason = `Rule-based (Deliveries) - Prefab/Assembly (Dia ${diameter})`;
           }
         } else if (colorMode === 'services') {
-          // Cycle through the full 40-color Services palette
           const rgb = servicesPalette[servicesPaletteIndex % servicesPalette.length];
           color = { r: rgb[0], g: rgb[1], b: rgb[2], a: 255 };
           reason = 'Rule-based (Services) - Palette color';
@@ -340,7 +557,7 @@
       button.classList.toggle('active', coloringActive);
 
       if (coloringActive) {
-        servicesPaletteIndex = 0; // Reset palette index
+        servicesPaletteIndex = 0;
         await applyGroupColors();
       } else {
         await resetAllColors();
@@ -355,27 +572,43 @@
       } catch (e) {}
     }
 
-    function sortTable() {
-      groups.sort((a, b) => {
-        for (const {col, dir} of sortColumns) {
-          let A = a[col] ?? '';
-          let B = b[col] ?? '';
-          if (typeof A === 'string') A = A.toLowerCase();
-          if (typeof B === 'string') B = B.toLowerCase();
-          if (A !== B) return (A < B ? -1 : 1) * (dir === 'asc' ? 1 : -1);
-        }
-        return 0;
+    function appliesFilters(group) {
+      return filters.every(f => {
+        const val = group[f.col] || '';
+        const str = val.toString().toLowerCase();
+        if (f.op === 'contains') return str.includes((f.val||'').toLowerCase());
+        if (f.op === 'noneof') return !f.tags.some(tag => str === tag.toLowerCase());
+        return true;
       });
-      renderTable();
     }
 
     function renderTable() {
       const tbody = document.querySelector('#rebarTable tbody');
       tbody.innerHTML = '';
 
-      let totalBars = 0;
+      let filteredGroups = groups.filter(appliesFilters);
 
-      groups.forEach(group => {
+      let rows = [];
+      if (groupBy.length === 0) {
+        rows = filteredGroups;
+      } else {
+        const grouped = {};
+        filteredGroups.forEach(g => {
+          const key = groupBy.map(col => g[col] ?? '').join(' │ ');
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(g);
+        });
+        Object.keys(grouped).sort().forEach(key => {
+          const groupRow = document.createElement('tr');
+          groupRow.className = 'group-header';
+          groupRow.innerHTML = `<td colspan="14"><strong>Group: ${key} (${grouped[key].length} items)</strong></td>`;
+          tbody.appendChild(groupRow);
+          grouped[key].forEach(g => rows.push(g));
+        });
+      }
+
+      let totalBars = 0;
+      rows.forEach(group => {
         totalBars += group.quantity;
 
         const color = group.color || { r: 255, g: 255, b: 255 };
@@ -385,25 +618,23 @@
         const groupTr = document.createElement('tr');
         groupTr.className = 'group-row' + (isSelected ? ' selected' : '');
         groupTr.dataset.groupKey = group.key;
-        groupTr.innerHTML = `
-          <td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});">
-            <img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon">
-          </td>
-          <td class="center">${group.mark}</td>
-          <td>${group.subassembly || '--'}</td>
-          <td class="center">${group.diameter || '--'}</td>
-          <td>${group.shape || '--'}</td>
-          <td class="numeric">${group.h1 || '--'}</td>
-          <td class="numeric">${group.v1 || '--'}</td>
-          <td class="numeric">${group.z1 || '--'}</td>
-          <td class="numeric">${group.h2 || '--'}</td>
-          <td class="numeric">${group.v2 || '--'}</td>
-          <td class="numeric">${group.z2 || '--'}</td>
-          <td class="numeric">${group.length}</td>
-          <td class="center">${group.quantity}</td>
-          <td class="color-reason">${reason}</td>
-        `;
 
+        let html = `<td class="expand-cell" style="background-color: rgb(${color.r},${color.g},${color.b});">
+          <img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon">
+        </td>`;
+        columnConfig.forEach(col => {
+          if (!col.visible) return;
+          if (col.key === 'expand') return;
+          if (col.key === 'reason') {
+            html += `<td class="color-reason">${reason}</td>`;
+            return;
+          }
+          let value = group[col.key] || '--';
+          if (col.key === 'quantity') value = group.quantity;
+          const cls = ['mark', 'diameter', 'quantity'].includes(col.key) ? 'center' : 'numeric';
+          html += `<td class="${cls}">${value}</td>`;
+        });
+        groupTr.innerHTML = html;
         groupTr.addEventListener('click', (e) => handleRowClick(e, group, groupTr));
         tbody.appendChild(groupTr);
 
@@ -412,40 +643,36 @@
             const childTr = document.createElement('tr');
             childTr.className = 'child-row' + (isSelected ? ' selected' : '');
             childTr.dataset.groupKey = group.key;
-            childTr.innerHTML = `
-              <td class="center index-cell">${idx + 1}</td>
-              <td class="center gray-bg">${group.mark}</td>
-              <td class="gray-bg">${group.subassembly || '--'}</td>
-              <td class="center gray-bg">${group.diameter || '--'}</td>
-              <td class="gray-bg">${group.shape || '--'}</td>
-              <td class="numeric">${bar.h1 || '--'}</td>
-              <td class="numeric">${bar.v1 || '--'}</td>
-              <td class="numeric">${bar.z1 || '--'}</td>
-              <td class="numeric">${bar.h2 || '--'}</td>
-              <td class="numeric">${bar.v2 || '--'}</td>
-              <td class="numeric">${bar.z2 || '--'}</td>
-              <td class="numeric gray-bg">${group.length}</td>
-              <td class="center gray-bg">${group.quantity}</td>
-              <td class="color-reason gray-bg">${reason}</td>
-            `;
+            let childHtml = `<td class="center index-cell">${idx + 1}</td>`;
+            columnConfig.forEach(col => {
+              if (!col.visible) return;
+              if (col.key === 'expand') return;
+              if (col.key === 'reason') {
+                childHtml += `<td class="color-reason gray-bg">${reason}</td>`;
+                return;
+              }
+              let value = group[col.key] || '--';
+              if (['h1','v1','z1','h2','v2','z2'].includes(col.key)) value = bar[col.key] || '--';
+              if (col.key === 'quantity') value = group.quantity;
+              const cls = ['mark', 'diameter', 'quantity'].includes(col.key) ? 'center gray-bg' : 'numeric';
+              childHtml += `<td class="${cls}">${value}</td>`;
+            });
+            childTr.innerHTML = childHtml;
             childTr.addEventListener('click', (e) => handleRowClick(e, group, childTr));
             tbody.appendChild(childTr);
           });
         }
       });
 
-      if (groups.length > 0) {
+      if (rows.length > 0) {
         const totalsTr = document.createElement('tr');
         totalsTr.className = 'totals-row';
-        totalsTr.innerHTML = `
-          <td colspan="3"><strong>Total</strong></td>
-          <td class="center">--</td>
-          <td>--</td>
-          <td colspan="6"></td>
-          <td class="numeric">--</td>
-          <td class="center"><strong>${totalBars}</strong></td>
-          <td></td>
-        `;
+        let totalsHtml = `<td colspan="2"><strong>Total</strong></td>`;
+        columnConfig.slice(2, -1).forEach(col => {
+          totalsHtml += col.visible ? '<td></td>' : '';
+        });
+        totalsHtml += `<td class="center"><strong>${totalBars}</strong></td><td></td>`;
+        totalsTr.innerHTML = totalsHtml;
         tbody.appendChild(totalsTr);
       }
     }
@@ -623,7 +850,7 @@
       return props.properties?.some(p => p.name === 'Tekla Reinforcement - Bending List' || p.name === 'ICOS Rebar' || p.name === 'ICOS BBS');
     }
 
-    // Sort popup remains unchanged
+    // Sort popup
     const sortButton = document.getElementById('sortButton');
     const sortPopup = document.getElementById('sortPopup');
     const sortLevels = document.getElementById('sortLevels');
@@ -687,9 +914,6 @@
       sortPopup.style.right = (window.innerWidth - rect.right) + 'px';
       sortPopup.style.display = 'block';
     };
-
-    sortPopup.addEventListener('click', (e) => e.stopPropagation());
-    document.addEventListener('click', () => { sortPopup.style.display = 'none'; });
 
     document.getElementById('refresh').onclick = processRebar;
     document.getElementById('colorGroups').onclick = toggleColorGroups;
