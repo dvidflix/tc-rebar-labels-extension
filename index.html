@@ -5,8 +5,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rebar Labels</title>
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght=400;600&display=swap">
   <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Additional styles for popups */
+    .settings-popup, .sort-popup {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+      padding: 12px;
+      border-radius: 4px;
+      min-width: 200px;
+      display: none;
+    }
+    .settings-header, .sort-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+    .settings-content label {
+      display: block;
+      margin-bottom: 8px;
+    }
+    .settings-content select {
+      width: 100%;
+      padding: 6px;
+    }
+    #closeSettings {
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
   <div class="header">
@@ -33,19 +68,19 @@
       <button id="refresh" title="Refresh Rebar Data">
         <img src="update.svg" alt="Refresh">
       </button>
-      <button id="settingsButton" title="Settings">
-        <img src="menu.svg" alt="Settings">
+      <button id="sortButton" title="Sort">
+        <img src="sort.svg" alt="Sort">
       </button>
       <button id="colorGroups" class="toggle-button" title="Apply Colors">
         <img src="background.svg" alt="Color Groups">
       </button>
-      <button id="sortButton" title="Sort">
-        <img src="sort.svg" alt="Sort">
+      <button id="settingsButton" title="Settings">
+        <img src="menu.svg" alt="Settings">
       </button>
     </div>
   </div>
 
-  <!-- Settings Popup -->
+  <!-- Settings Popup (right-aligned) -->
   <div id="settingsPopup" class="settings-popup">
     <div class="settings-header">
       <span>Settings</span>
@@ -60,7 +95,7 @@
     </div>
   </div>
 
-  <!-- Advanced Sort Popup -->
+  <!-- Sort Popup (right-aligned) -->
   <div id="sortPopup" class="sort-popup">
     <div class="sort-header">
       <span class="sort-count">1 Sort</span>
@@ -74,12 +109,15 @@
       <tr>
         <th>#</th>
         <th data-sort="mark">Mark</th>
-        <th data-sort="startX">Start X</th>
-        <th data-sort="startY">Start Y</th>
-        <th data-sort="endX">End X</th>
-        <th data-sort="endY">End Y</th>
+        <th data-sort="subassembly">Subassembly -1</th>
         <th data-sort="diameter">Diam.</th>
         <th data-sort="shape">Shape code</th>
+        <th data-sort="h1">H1</th>
+        <th data-sort="v1">V1</th>
+        <th data-sort="z1">Z1</th>
+        <th data-sort="h2">H2</th>
+        <th data-sort="v2">V2</th>
+        <th data-sort="z2">Z2</th>
         <th data-sort="length">Length</th>
         <th data-sort="quantity">Count</th>
         <th>Color Reason</th>
@@ -120,7 +158,7 @@
       debugConsole.scrollTop = debugConsole.scrollHeight;
     }
 
-    // Views Dropdown
+    // Views Dropdown (unchanged)
     const viewsDropdown = document.getElementById('viewsDropdown');
     const viewsMenu = document.getElementById('viewsMenu');
     const viewsText = document.getElementById('viewsText');
@@ -150,7 +188,7 @@
       viewsMenu.classList.remove('show');
     });
 
-    // Settings Popup
+    // Settings Popup (right-aligned)
     const settingsButton = document.getElementById('settingsButton');
     const settingsPopup = document.getElementById('settingsPopup');
     const closeSettings = document.getElementById('closeSettings');
@@ -158,6 +196,9 @@
 
     settingsButton.onclick = (e) => {
       e.stopPropagation();
+      const rect = settingsButton.getBoundingClientRect();
+      settingsPopup.style.top = rect.bottom + 'px';
+      settingsPopup.style.right = (window.innerWidth - rect.right) + 'px';
       settingsPopup.style.display = 'block';
       colorModeSelect.value = colorMode;
     };
@@ -168,7 +209,7 @@
 
     colorModeSelect.onchange = () => {
       colorMode = colorModeSelect.value;
-      if (coloringActive) applyGroupColors(); // re-apply with new mode
+      if (coloringActive) applyGroupColors();
     };
 
     document.addEventListener('click', () => {
@@ -295,13 +336,9 @@
         for (const {col, dir} of sortColumns) {
           let A = a[col] ?? '';
           let B = b[col] ?? '';
-          if (col === 'shape') {
-            if (A !== B) return A.localeCompare(B) * (dir === 'asc' ? 1 : -1);
-          } else {
-            const numA = (A === '' || A === '--') ? -Infinity : parseFloat(A);
-            const numB = (B === '' || B === '--') ? -Infinity : parseFloat(B);
-            if (numA !== numB) return (numA < numB ? -1 : 1) * (dir === 'asc' ? 1 : -1);
-          }
+          if (typeof A === 'string') A = A.toLowerCase();
+          if (typeof B === 'string') B = B.toLowerCase();
+          if (A !== B) return (A < B ? -1 : 1) * (dir === 'asc' ? 1 : -1);
         }
         return 0;
       });
@@ -329,12 +366,15 @@
             <img src="${expandedGroups.has(group.key) ? 'chevron-down.svg' : 'chevron-right.svg'}" class="expand-icon">
           </td>
           <td class="center">${group.mark}</td>
-          <td class="numeric">${group.commonStartX || '--'}</td>
-          <td class="numeric">${group.commonStartY || '--'}</td>
-          <td class="numeric">${group.commonEndX || '--'}</td>
-          <td class="numeric">${group.commonEndY || '--'}</td>
+          <td>${group.subassembly || '--'}</td>
           <td class="center">${group.diameter || '--'}</td>
           <td>${group.shape || '--'}</td>
+          <td class="numeric">${group.h1 || '--'}</td>
+          <td class="numeric">${group.v1 || '--'}</td>
+          <td class="numeric">${group.z1 || '--'}</td>
+          <td class="numeric">${group.h2 || '--'}</td>
+          <td class="numeric">${group.v2 || '--'}</td>
+          <td class="numeric">${group.z2 || '--'}</td>
           <td class="numeric">${group.length}</td>
           <td class="center">${group.quantity}</td>
           <td class="color-reason">${reason}</td>
@@ -351,12 +391,15 @@
             childTr.innerHTML = `
               <td class="center index-cell">${idx + 1}</td>
               <td class="center gray-bg">${group.mark}</td>
-              <td class="numeric">${bar.startX || '--'}</td>
-              <td class="numeric">${bar.startY || '--'}</td>
-              <td class="numeric">${bar.endX || '--'}</td>
-              <td class="numeric">${bar.endY || '--'}</td>
+              <td class="gray-bg">${group.subassembly || '--'}</td>
               <td class="center gray-bg">${group.diameter || '--'}</td>
               <td class="gray-bg">${group.shape || '--'}</td>
+              <td class="numeric">${bar.h1 || '--'}</td>
+              <td class="numeric">${bar.v1 || '--'}</td>
+              <td class="numeric">${bar.z1 || '--'}</td>
+              <td class="numeric">${bar.h2 || '--'}</td>
+              <td class="numeric">${bar.v2 || '--'}</td>
+              <td class="numeric">${bar.z2 || '--'}</td>
               <td class="numeric gray-bg">${group.length}</td>
               <td class="center gray-bg">${group.quantity}</td>
               <td class="color-reason gray-bg">${reason}</td>
@@ -371,10 +414,10 @@
         const totalsTr = document.createElement('tr');
         totalsTr.className = 'totals-row';
         totalsTr.innerHTML = `
-          <td colspan="2"><strong>Total</strong></td>
-          <td colspan="4"></td>
+          <td colspan="3"><strong>Total</strong></td>
           <td class="center">--</td>
           <td>--</td>
+          <td colspan="6"></td>
           <td class="numeric">--</td>
           <td class="center"><strong>${totalBars}</strong></td>
           <td></td>
@@ -455,7 +498,7 @@
       expandedGroups = new Set();
 
       const tbody = document.querySelector('#rebarTable tbody');
-      tbody.innerHTML = '<tr><td colspan="11">Processing...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="14">Processing...</td></tr>';
 
       try {
         let objects = [];
@@ -499,40 +542,56 @@
           if (!groupMap[key]) {
             groupMap[key] = {
               key, mark, diameter: dia, shape, length,
+              subassembly: flat['Subassembly -1'] || '',
               objectIds: [], sampleProps: item.props, modelId: item.modelId,
               individualBars: []
             };
           }
           groupMap[key].objectIds.push(item.id);
           groupMap[key].individualBars.push({
-            startX: flat['Start Point X'] || '',
-            startY: flat['Start Point Y'] || '',
-            endX: flat['End Point X'] || '',
-            endY: flat['End Point Y'] || ''
+            h1: flat['Start Point X'] || '',
+            v1: flat['Start Point Y'] || '',
+            z1: flat['Start Point Z'] || '',
+            h2: flat['End Point X'] || '',
+            v2: flat['End Point Y'] || '',
+            z2: flat['End Point Z'] || ''
           });
         }
 
         groups = Object.values(groupMap);
         groups.forEach(g => {
           g.quantity = g.objectIds.length;
-          const startsX = new Set(g.individualBars.map(b => b.startX));
-          g.commonStartX = startsX.size === 1 ? g.individualBars[0].startX : '';
-          const startsY = new Set(g.individualBars.map(b => b.startY));
-          g.commonStartY = startsY.size === 1 ? g.individualBars[0].startY : '';
-          const endsX = new Set(g.individualBars.map(b => b.endX));
-          g.commonEndX = endsX.size === 1 ? g.individualBars[0].endX : '';
-          const endsY = new Set(g.individualBars.map(b => b.endY));
-          g.commonEndY = endsY.size === 1 ? g.individualBars[0].endY : '';
+
+          // Common values for group row
+          const startsH = new Set(g.individualBars.map(b => b.h1));
+          g.h1 = startsH.size === 1 ? g.individualBars[0].h1 : '';
+          const startsV = new Set(g.individualBars.map(b => b.v1));
+          g.v1 = startsV.size === 1 ? g.individualBars[0].v1 : '';
+          const startsZ = new Set(g.individualBars.map(b => b.z1));
+          g.z1 = startsZ.size === 1 ? g.individualBars[0].z1 : '';
+
+          const endsH = new Set(g.individualBars.map(b => b.h2));
+          g.h2 = endsH.size === 1 ? g.individualBars[0].h2 : '';
+          const endsV = new Set(g.individualBars.map(b => b.v2));
+          g.v2 = endsV.size === 1 ? g.individualBars[0].v2 : '';
+          const endsZ = new Set(g.individualBars.map(b => b.z2));
+          g.z2 = endsZ.size === 1 ? g.individualBars[0].z2 : '';
         });
 
+        // Default sort: Diameter (desc for larger first), then Subassembly -1 (asc)
+        sortColumns = [
+          { col: 'diameter', dir: 'desc' },
+          { col: 'subassembly', dir: 'asc' }
+        ];
         sortTable();
+
         document.getElementById('status').textContent = `Success! Found ${groups.length} groups from ${objects.length} bars.`;
         document.getElementById('status').classList.add('good');
 
         if (coloringActive) await applyGroupColors();
       } catch (err) {
         debug('ERROR: ' + err.message);
-        tbody.innerHTML = `<tr><td colspan="11">Error: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="14">Error: ${err.message}</td></tr>`;
         document.getElementById('status').textContent = 'Failed: ' + err.message;
         document.getElementById('status').classList.add('error');
       }
@@ -542,16 +601,21 @@
       return props.properties?.some(p => p.name === 'Tekla Reinforcement - Bending List' || p.name === 'ICOS Rebar' || p.name === 'ICOS BBS');
     }
 
-    // Sort popup
+    // Sort popup (right-aligned)
+    const sortButton = document.getElementById('sortButton');
     const sortPopup = document.getElementById('sortPopup');
     const sortLevels = document.getElementById('sortLevels');
     const addSortBtn = document.getElementById('addSort');
     const sortCount = document.querySelector('.sort-count');
 
-    const columns = ['mark', 'startX', 'startY', 'endX', 'endY', 'diameter', 'shape', 'length', 'quantity'];
-    const columnNames = { mark: 'Mark', startX: 'Start X', startY: 'Start Y', endX: 'End X', endY: 'End Y', diameter: 'Diam.', shape: 'Shape code', length: 'Length', quantity: 'Count' };
+    const columns = ['mark', 'subassembly', 'diameter', 'shape', 'h1', 'v1', 'z1', 'h2', 'v2', 'z2', 'length', 'quantity'];
+    const columnNames = { 
+      mark: 'Mark', subassembly: 'Subassembly -1', diameter: 'Diam.', shape: 'Shape code',
+      h1: 'H1', v1: 'V1', z1: 'Z1', h2: 'H2', v2: 'V2', z2: 'Z2',
+      length: 'Length', quantity: 'Count'
+    };
 
-    function createSortLevel(levelIndex, col = 'mark', dir = 'asc') {
+    function createSortLevel(levelIndex, col = 'diameter', dir = 'desc') {
       const level = document.createElement('div');
       level.className = 'sort-level';
       level.innerHTML = `
@@ -590,13 +654,13 @@
 
     new Sortable(sortLevels, { handle: '.grip', animation: 150, onEnd: updateSortColumns });
 
-    document.getElementById('sortButton').onclick = (e) => {
+    sortButton.onclick = (e) => {
       e.stopPropagation();
       sortLevels.innerHTML = '';
       sortColumns.forEach((sc, i) => sortLevels.appendChild(createSortLevel(i, sc.col, sc.dir)));
-      if (sortColumns.length === 0) sortLevels.appendChild(createSortLevel(0));
+      if (sortColumns.length === 0) sortLevels.appendChild(createSortLevel(0, 'diameter', 'desc'));
       updateSortColumns();
-      const rect = document.getElementById('sortButton').getBoundingClientRect();
+      const rect = sortButton.getBoundingClientRect();
       sortPopup.style.top = rect.bottom + 'px';
       sortPopup.style.right = (window.innerWidth - rect.right) + 'px';
       sortPopup.style.display = 'block';
